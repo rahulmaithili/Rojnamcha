@@ -167,17 +167,32 @@ function setupGoogleScriptRunProxy() {
   }
 }
 
+const defaultFirebaseConfig = {
+  apiKey: "AIzaSyBVB9_TjSVoFkX_zAxQ7WcVGqvD0uShVRk",
+  authDomain: "rojnamcha-ledger.firebaseapp.com",
+  projectId: "rojnamcha-ledger",
+  storageBucket: "rojnamcha-ledger.firebasestorage.app",
+  messagingSenderId: "853641759086",
+  appId: "1:853641759086:web:661bad13d56220c231997f"
+};
+
 function initDatabaseConnection() {
   dbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
   
   if (dbMode === 'firebase') {
-    const configStr = localStorage.getItem('rojnamcha_firebase_config');
+    let configStr = localStorage.getItem('rojnamcha_firebase_config');
+    let config;
     if (!configStr) {
-      showApiConfigScreen();
-      return false;
+      config = defaultFirebaseConfig;
+      localStorage.setItem('rojnamcha_firebase_config', JSON.stringify(defaultFirebaseConfig, null, 2));
+    } else {
+      try {
+        config = JSON.parse(configStr);
+      } catch(e) {
+        config = defaultFirebaseConfig;
+      }
     }
     try {
-      const config = JSON.parse(configStr);
       if (firebase.apps.length === 0) {
         firebaseApp = firebase.initializeApp(config);
       } else {
@@ -233,7 +248,7 @@ function showApiConfigScreen() {
   
   const firebaseInput = document.getElementById('setup-firebase-config');
   if (firebaseInput) {
-    firebaseInput.value = localStorage.getItem('rojnamcha_firebase_config') || '';
+    firebaseInput.value = localStorage.getItem('rojnamcha_firebase_config') || JSON.stringify(defaultFirebaseConfig, null, 2);
   }
   
   document.getElementById('api-config-screen-overlay').style.display = 'flex';
