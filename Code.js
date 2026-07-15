@@ -33,7 +33,7 @@ function doGet(e) {
     initData = { success: false, error: err.toString() };
   }
   
-  var template = HtmlService.createTemplateFromFile('Index');
+  var template = HtmlService.createTemplateFromFile('Index_GAS');
   template.initDataJson = JSON.stringify(initData);
   
   return template.evaluate()
