@@ -1,0 +1,4034 @@
+<script>
+// Initialize theme immediately on script execution to avoid page flash
+(function() {
+  const savedTheme = localStorage.getItem('rojnamcha-theme') || 'light';
+  if (savedTheme === 'dark') {
+    document.body.classList.add('dark-theme');
+  }
+})();
+
+// Standalone Netlify / Proxy Detection and API Interceptor
+const isStandalone = typeof google === 'undefined' || !google.script || !google.script.run || (window.location.hostname !== 'script.google.com' && !window.location.hostname.endsWith('.googleusercontent.com'));
+
+if (isStandalone) {
+  function callBackendApi(action, args, successHandler, failureHandler) {
+    const apiUrl = localStorage.getItem('rojnamcha_api_url') || 'https://script.google.com/macros/s/AKfycbx8h0orszwV29cKrVCUbrR-59HzsF1_aCFfuSBRVpQp3VnzI0carkCRWt5M_eb-Ra-DBA/exec';
+    if (!apiUrl) {
+      if (failureHandler) {
+        failureHandler(new Error('API URL is not configured.'));
+      }
+      showApiConfigScreen();
+      return;
+    }
+
+    fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain'
+      },
+      body: JSON.stringify({ action: action, args: args })
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('HTTP network error: ' + response.statusText);
+      }
+      return response.json();
+    })
+    .then(res => {
+      if (res && res.success === false) {
+        if (failureHandler) {
+          failureHandler(new Error(res.error || 'API execution error'));
+        } else {
+          showToast(res.error || 'Server error occurred', 'error');
+        }
+      } else {
+        if (successHandler) {
+          successHandler(res);
+        }
+      }
+    })
+    .catch(err => {
+      console.error('API call failed:', err);
+      if (failureHandler) {
+        failureHandler(err);
+      } else {
+        showToast('API call failed: ' + err.message, 'error');
+      }
+    });
+  }
+
+  function createRunContext() {
+    let successHandler = null;
+    let failureHandler = null;
+    const context = {};
+    const proxy = new Proxy(context, {
+      get(target, prop) {
+        if (prop === 'withSuccessHandler') {
+          return function(h) {
+            successHandler = h;
+            return proxy;
+          };
+        }
+        if (prop === 'withFailureHandler') {
+          return function(h) {
+            failureHandler = h;
+            return proxy;
+          };
+        }
+        return function(...args) {
+          callBackendApi(prop, args, successHandler, failureHandler);
+        };
+      }
+    });
+    return proxy;
+  }
+
+  window.google = {
+    script: {
+      get run() {
+        return createRunContext();
+      }
+    }
+  };
+}
+
+function showApiConfigScreen() {
+  document.querySelector('.app-container').style.display = 'none';
+  document.getElementById('login-screen-overlay').style.display = 'none';
+  document.getElementById('register-screen-overlay').style.display = 'none';
+  document.getElementById('forgot-screen-overlay').style.display = 'none';
+  
+  const setupUrlInput = document.getElementById('setup-api-url');
+  if (setupUrlInput && !setupUrlInput.value) {
+    setupUrlInput.value = 'https://script.google.com/macros/s/AKfycbx8h0orszwV29cKrVCUbrR-59HzsF1_aCFfuSBRVpQp3VnzI0carkCRWt5M_eb-Ra-DBA/exec';
+  }
+  
+  document.getElementById('api-config-screen-overlay').style.display = 'flex';
+}
+
+window.handleApiConfigSubmit = function() {
+  const urlInput = document.getElementById('setup-api-url');
+  const url = urlInput.value.trim();
+  if (!url) {
+    showToast('Please enter a valid URL', 'error');
+    return;
+  }
+
+  if (!url.startsWith('https://script.google.com/macros/s/') || !url.endsWith('/exec')) {
+    if (!confirm('The URL does not match standard Apps Script Web App structure (macros/s/.../exec). Proceed anyway?')) {
+      return;
+    }
+  }
+
+  showLoading(true, 'Testing connection...');
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ action: 'getCompanyProfile', args: [] })
+  })
+  .then(response => response.json())
+  .then(res => {
+    showLoading(false);
+    if (res && res.companyName) {
+      localStorage.setItem('rojnamcha_api_url', url);
+      showToast('Backend connected successfully!', 'success');
+      document.getElementById('api-config-screen-overlay').style.display = 'none';
+      
+      const profileApiField = document.getElementById('profile-api-url');
+      if (profileApiField) {
+        profileApiField.value = url;
+      }
+      
+      checkSession();
+    } else {
+      showToast('Connection failed: Invalid API response.', 'error');
+    }
+  })
+  .catch(err => {
+    showLoading(false);
+    showToast('Connection failed: ' + err.message, 'error');
+  });
+};
+
+const state = {
+        selectedDate: '',
+        dropdownOptions: { receipts: [], expenses: [] },
+        existingDates: [],
+        companyProfile: { companyName: '', companyAddress: '', companyGSTIN: '', companyLogo: '', mailDefaultRecipient: '', mailDefaultSubject: '', mailDefaultBody: '' },
+        activeAutocompleteIndex: -1,
+        isSaving: false,
+        isLoading: false,
+        currentUser: null,
+        breakdowns: { home: [], bank: [] },
+        currentBreakdownType: '',
+        auditHomeRecords: [],
+        auditBankRecords: [],
+        allDates: []
+      };
+
+      let confirmCallback = null;
+
+      document.addEventListener('DOMContentLoaded', function() {
+        const apiUrl = localStorage.getItem('rojnamcha_api_url') || 'https://script.google.com/macros/s/AKfycbx8h0orszwV29cKrVCUbrR-59HzsF1_aCFfuSBRVpQp3VnzI0carkCRWt5M_eb-Ra-DBA/exec';
+        if (isStandalone && !apiUrl) {
+          showApiConfigScreen();
+        } else {
+          checkSession();
+        }
+        
+        window.addEventListener('beforeprint', function() {
+          document.querySelector('.preview-banner').style.display = 'none';
+          document.body.style.paddingTop = '0px';
+        });
+        window.addEventListener('afterprint', function() {
+          document.querySelector('.preview-banner').style.display = 'block';
+          document.body.style.paddingTop = '35px';
+        });
+      });
+
+      function checkSession() {
+        const apiUrl = localStorage.getItem('rojnamcha_api_url') || 'https://script.google.com/macros/s/AKfycbx8h0orszwV29cKrVCUbrR-59HzsF1_aCFfuSBRVpQp3VnzI0carkCRWt5M_eb-Ra-DBA/exec';
+        if (isStandalone && !apiUrl) {
+          showApiConfigScreen();
+          return;
+        }
+        const session = JSON.parse(localStorage.getItem('rojnamcha_session') || 'null');
+        if (session && session.username && session.passwordHash) {
+          showLoading(true, 'Verifying session...');
+          google.script.run
+            .withSuccessHandler(function(res) {
+              showLoading(false);
+              if (res && res.success) {
+                state.currentUser = res.user;
+                state.currentUser.passwordHash = session.passwordHash;
+                initApp();
+              } else {
+                localStorage.removeItem('rojnamcha_session');
+                showAuthScreen('login');
+              }
+            })
+            .withFailureHandler(function(err) {
+              showLoading(false);
+              localStorage.removeItem('rojnamcha_session');
+              showAuthScreen('login');
+              showToast('Session expired or invalid: ' + err.message, 'error');
+            })
+            .validateSession(session.username, session.passwordHash);
+        } else {
+          showAuthScreen('login');
+        }
+      }
+
+      function showAuthScreen(screen) {
+        document.querySelector('.app-container').style.display = 'none';
+        
+        document.getElementById('login-screen-overlay').style.display = 'none';
+        document.getElementById('register-screen-overlay').style.display = 'none';
+        document.getElementById('forgot-screen-overlay').style.display = 'none';
+        
+        if (screen === 'login') {
+          document.getElementById('login-screen-overlay').style.display = 'flex';
+        } else if (screen === 'register') {
+          document.getElementById('register-screen-overlay').style.display = 'flex';
+        } else if (screen === 'forgot') {
+          document.getElementById('forgot-screen-overlay').style.display = 'flex';
+        }
+      }
+
+      function initApp() {
+        document.getElementById('login-screen-overlay').style.display = 'none';
+        document.getElementById('register-screen-overlay').style.display = 'none';
+        document.getElementById('forgot-screen-overlay').style.display = 'none';
+        
+        document.querySelector('.app-container').style.display = 'flex';
+        
+        const widget = document.getElementById('user-profile-widget');
+        const nameEl = document.getElementById('user-profile-name');
+        const roleEl = document.getElementById('user-profile-role');
+        const avatarEl = document.getElementById('user-profile-avatar');
+        
+        if (state.currentUser) {
+          nameEl.innerText = state.currentUser.name || state.currentUser.username;
+          roleEl.innerText = state.currentUser.role || 'User';
+          avatarEl.innerText = (state.currentUser.name || state.currentUser.username).charAt(0).toUpperCase();
+          widget.style.display = 'flex';
+          
+          const tabUsers = document.getElementById('tab-users');
+          if (state.currentUser.role === 'Admin') {
+            tabUsers.style.display = 'flex';
+          } else {
+            tabUsers.style.display = 'none';
+          }
+        }
+        
+        initDatepicker();
+        setupEventListeners();
+        setupNavigation();
+        
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('ledger-date').value = today;
+        
+        function handleInitData(initData) {
+          if (initData) {
+            if (initData.success === false) {
+              showToast('Initialization error: ' + initData.error, 'error');
+              return;
+            }
+            // 1. Company Profile
+            state.companyProfile = initData.profile;
+            applyCompanyProfile(initData.profile);
+            
+            // 2. Dropdown Options
+            state.dropdownOptions = initData.options;
+            renderDropdownManagerList();
+            
+            // 3. Existing Dates
+            state.existingDates = initData.dates;
+            renderHistoryList(initData.dates);
+            
+            // 4. Load Ledger
+            state.selectedDate = today;
+            document.getElementById('display-date').innerText = formatDateReadable(today);
+            updateActiveSidebarItem(today);
+            
+            if (initData.rojnamchaData && !initData.rojnamchaData.isNew) {
+              populateLedger(initData.rojnamchaData);
+              showToast('Ledger loaded successfully', 'success');
+            } else {
+              resetLedgerForm();
+              applyPreviousClosingCash(today, initData.previousClosingCash || 0);
+            }
+          }
+        }
+
+        if (window.INITIAL_DATA) {
+          handleInitData(window.INITIAL_DATA);
+        } else {
+          // Single optimized startup call for all initial data
+          showLoading(true, 'Initializing Rojnamcha application...');
+          google.script.run
+            .withSuccessHandler(function(initData) {
+              showLoading(false);
+              handleInitData(initData);
+            })
+            .withFailureHandler(function(err) {
+              showLoading(false);
+              showToast('Initialization error: ' + err.message, 'error');
+            })
+            .getInitialData(today);
+        }
+      }
+
+      function initDatepicker() {
+        const dateInput = document.getElementById('ledger-date');
+        dateInput.addEventListener('change', function() {
+          handleDateChange(this.value);
+        });
+      }
+
+      function loadCompanyProfile() {
+        google.script.run
+          .withSuccessHandler(function(profile) {
+            state.companyProfile = profile;
+            applyCompanyProfile(profile);
+          })
+          .withFailureHandler(function(err) {
+            showToast('Error loading company profile: ' + err.message, 'error');
+          })
+          .getCompanyProfile();
+      }
+
+      function applyCompanyProfile(profile) {
+        document.getElementById('header-name').innerText = profile.companyName;
+        document.getElementById('header-address').innerText = profile.companyAddress;
+        document.getElementById('header-gstin').innerText = 'GSTIN: ' + profile.companyGSTIN;
+        document.getElementById('sidebar-agency-title').innerText = profile.companyName;
+        document.title = 'Rojnamcha - ' + profile.companyName;
+        
+        document.getElementById('profile-name').value = profile.companyName;
+        document.getElementById('profile-address').value = profile.companyAddress;
+        document.getElementById('profile-gstin').value = profile.companyGSTIN;
+        
+        const profileApiField = document.getElementById('profile-api-url');
+        if (profileApiField) {
+          profileApiField.value = localStorage.getItem('rojnamcha_api_url') || '';
+        }
+        
+        // Mail settings prefill
+        document.getElementById('profile-mail-recipients').value = profile.mailDefaultRecipient || '';
+        document.getElementById('profile-mail-subject').value = profile.mailDefaultSubject || '';
+        document.getElementById('profile-mail-body').value = profile.mailDefaultBody || '';
+        
+        const logoContainer = document.getElementById('agency-logo-container');
+        const logoImg = document.getElementById('agency-logo-img');
+        if (profile.companyLogo) {
+          if (profile.companyLogo.indexOf('data:image') === 0) {
+            logoImg.src = profile.companyLogo;
+          } else {
+            const driveId = getDriveFileId(profile.companyLogo) || profile.companyLogo;
+            if (driveId && driveId.length > 20) {
+              logoImg.src = 'https://lh3.googleusercontent.com/d/' + driveId;
+            } else {
+              logoImg.src = profile.companyLogo;
+            }
+          }
+          logoContainer.style.display = 'flex';
+        } else {
+          logoImg.src = '';
+          logoContainer.style.display = 'none';
+        }
+        
+        updateModalLogoPreview(profile.companyLogo);
+      }
+
+      function getDriveFileId(url) {
+        if (!url) return null;
+        const match = url.match(/[-\w]{25,}/);
+        return match ? match[0] : null;
+      }
+
+      function updateModalLogoPreview(dataUrl) {
+        const placeholder = document.getElementById('profile-logo-placeholder');
+        const modalImg = document.getElementById('profile-logo-img');
+        const removeBtn = document.getElementById('btn-remove-logo');
+        const logoUrlField = document.getElementById('profile-logo-url');
+        
+        if (dataUrl) {
+          if (dataUrl.indexOf('data:image') === 0) {
+            modalImg.src = dataUrl;
+            modalImg.style.display = 'block';
+            placeholder.style.display = 'none';
+            removeBtn.style.display = 'inline-block';
+          } else {
+            const driveId = getDriveFileId(dataUrl) || dataUrl;
+            if (driveId && driveId.length > 20) {
+              modalImg.src = 'https://lh3.googleusercontent.com/d/' + driveId;
+            } else {
+              modalImg.src = dataUrl;
+            }
+            modalImg.style.display = 'block';
+            placeholder.style.display = 'none';
+            removeBtn.style.display = 'inline-block';
+            logoUrlField.value = dataUrl;
+          }
+        } else {
+          modalImg.src = '';
+          modalImg.style.display = 'none';
+          placeholder.style.display = 'block';
+          removeBtn.style.display = 'none';
+          document.getElementById('profile-logo-input').value = '';
+          logoUrlField.value = '';
+        }
+      }
+
+      function resizeImageToMax(file, maxWidth, maxHeight, callback) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const img = new Image();
+          img.onload = function() {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            // Maintain aspect ratio within maxWidth x maxHeight
+            if (width > maxWidth || height > maxHeight) {
+              const ratio = Math.min(maxWidth / width, maxHeight / height);
+              width  = Math.round(width  * ratio);
+              height = Math.round(height * ratio);
+            }
+
+            canvas.width  = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            // Fill white background so transparent PNGs compress well as JPEG
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // JPEG at 0.65 quality keeps size well under 50 000 characters
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+            callback(dataUrl);
+          };
+          img.onerror = function() {
+            showToast('Invalid image file', 'error');
+            showLoading(false);
+          };
+          img.src = e.target.result;
+        };
+        reader.onerror = function() {
+          showToast('Failed to read file', 'error');
+          showLoading(false);
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function saveCompanyProfile() {
+        const name = document.getElementById('profile-name').value.trim();
+        const address = document.getElementById('profile-address').value.trim();
+        const gstin = document.getElementById('profile-gstin').value.trim();
+        const logoUrlField = document.getElementById('profile-logo-url').value.trim();
+        const logo = logoUrlField ? logoUrlField : (state.companyProfile.companyLogo || '');
+        
+        const mailRecipients = document.getElementById('profile-mail-recipients').value.trim();
+        const mailSubject = document.getElementById('profile-mail-subject').value.trim();
+        const mailBody = document.getElementById('profile-mail-body').value.trim();
+        
+        const apiUrlField = document.getElementById('profile-api-url');
+        if (apiUrlField && isStandalone) {
+          const newApiUrl = apiUrlField.value.trim();
+          if (newApiUrl) {
+            localStorage.setItem('rojnamcha_api_url', newApiUrl);
+          } else {
+            localStorage.removeItem('rojnamcha_api_url');
+          }
+        }
+        
+        if (!name) {
+          showToast('Company Name cannot be empty', 'error');
+          return;
+        }
+        
+        const profile = { 
+          companyName: name, 
+          companyAddress: address, 
+          companyGSTIN: gstin, 
+          companyLogo: logo,
+          mailDefaultRecipient: mailRecipients,
+          mailDefaultSubject: mailSubject,
+          mailDefaultBody: mailBody
+        };
+        
+        showLoading(true, 'Saving company profile...');
+        google.script.run
+          .withSuccessHandler(function() {
+            state.companyProfile = profile;
+            applyCompanyProfile(profile);
+            document.getElementById('profile-modal').classList.remove('active');
+            showLoading(false);
+            showToast('Company Profile updated!', 'success');
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to save profile: ' + err.message, 'error');
+          })
+          .saveCompanyProfile(profile);
+      }
+
+      function applyPreviousClosingCash(dateStr, cash) {
+        const prevDate = getPreviousDateStr(dateStr);
+        const formattedPrevDate = formatDateReadable(prevDate);
+        
+        const r1Details = document.getElementById('r-details-1');
+        const r1Amount = document.getElementById('r-amount-1');
+        
+        if (r1Details) r1Details.value = 'CASH IN HAND ' + formattedPrevDate;
+        if (r1Amount) r1Amount.value = cash.toFixed(2);
+        
+        calculateAll();
+        showToast('Opening Cash pulled: ₹' + cash.toLocaleString(), 'info');
+      }
+
+      function handleDateChange(dateStr) {
+        if (!dateStr) return;
+        state.selectedDate = dateStr;
+        
+        document.getElementById('display-date').innerText = formatDateReadable(dateStr);
+        updateActiveSidebarItem(dateStr);
+        
+        showLoading(true, 'Loading ledger for ' + formatDateReadable(dateStr) + '...');
+        
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result && !result.isNew) {
+              populateLedger(result);
+              showToast('Ledger loaded successfully', 'success');
+            } else {
+              resetLedgerForm();
+              var cash = result ? (result.previousClosingCash || 0) : 0;
+              applyPreviousClosingCash(dateStr, cash);
+            }
+            showLoading(false);
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Error loading ledger: ' + err.message, 'error');
+          })
+          .getRojnamchaData(dateStr);
+      }
+
+      function fetchPreviousClosingCash(dateStr) {
+        google.script.run
+          .withSuccessHandler(function(cash) {
+            applyPreviousClosingCash(dateStr, cash);
+          })
+          .withFailureHandler(function(err) {
+            showToast('Could not fetch previous closing cash: ' + err.message, 'error');
+          })
+          .getPreviousClosingCash(dateStr);
+      }
+
+      function loadDropdownOptions() {
+        google.script.run
+          .withSuccessHandler(function(options) {
+            state.dropdownOptions = options;
+            renderDropdownManagerList();
+          })
+          .withFailureHandler(function(err) {
+            showToast('Error loading dropdown choices: ' + err.message, 'error');
+          })
+          .getDropdownOptions();
+      }
+
+      function loadExistingDates() {
+        google.script.run
+          .withSuccessHandler(function(dates) {
+            state.existingDates = dates;
+            renderHistoryList(dates);
+            updateActiveSidebarItem(state.selectedDate);
+          })
+          .withFailureHandler(function(err) {
+            showToast('Error loading history: ' + err.message, 'error');
+          })
+          .getExistingDates();
+      }
+
+      let showAllHistory = false;
+
+      function renderHistoryList(dates) {
+        const historyList = document.getElementById('history-list');
+        if (!historyList) return;
+        historyList.innerHTML = '';
+        
+        state.allDates = dates || [];
+        
+        const filterInput = document.getElementById('history-search');
+        const filterVal = filterInput ? filterInput.value.toLowerCase().trim() : '';
+        
+        let filteredDates = state.allDates;
+        if (filterVal) {
+          filteredDates = state.allDates.filter(function(d) {
+            const readable = formatDateReadable(d).toLowerCase();
+            return readable.includes(filterVal) || d.includes(filterVal);
+          });
+        }
+        
+        let datesToRender = filteredDates;
+        if (!showAllHistory && !filterVal) {
+          datesToRender = filteredDates.slice(0, 5);
+        }
+        
+        const toggleBtn = document.getElementById('history-toggle');
+        if (toggleBtn) {
+          if (filterVal) {
+            toggleBtn.style.display = 'none';
+          } else {
+            toggleBtn.style.display = state.allDates.length > 5 ? 'inline' : 'none';
+            toggleBtn.innerText = showAllHistory ? 'Show Less' : `Show All (${state.allDates.length})`;
+          }
+        }
+        
+        if (datesToRender.length === 0) {
+          historyList.innerHTML = '<li style="padding: 1rem; text-align: center; color: #94a3b8; font-size: 0.85rem;">No matching records.</li>';
+          return;
+        }
+        
+        datesToRender.forEach(function(dateStr) {
+          const li = document.createElement('li');
+          li.className = 'history-item';
+          li.dataset.date = dateStr;
+          
+          const displayDate = formatDateReadable(dateStr);
+          li.innerHTML = `<span class="history-item-date">${displayDate}</span>`;
+          
+          li.addEventListener('click', function() {
+            document.getElementById('ledger-date').value = dateStr;
+            handleDateChange(dateStr);
+          });
+          
+          historyList.appendChild(li);
+        });
+      }
+      
+      window.toggleHistoryLimit = function() {
+        showAllHistory = !showAllHistory;
+        renderHistoryList(state.allDates);
+      };
+      
+      window.filterHistoryList = function(val) {
+        renderHistoryList(state.allDates);
+      };
+
+      function updateActiveSidebarItem(dateStr) {
+        document.querySelectorAll('.history-item').forEach(item => {
+          if (item.dataset.date === dateStr) {
+            item.classList.add('active');
+          } else {
+            item.classList.remove('active');
+          }
+        });
+      }
+
+      function resetLedgerForm() {
+        const receiptsTbody = document.getElementById('receipts-tbody');
+        while (receiptsTbody.rows.length > 1) {
+          receiptsTbody.deleteRow(1);
+        }
+        
+        document.getElementById('r-details-1').value = 'CASH IN HAND';
+        document.getElementById('r-amount-1').value = '0.00';
+        
+        const expensesTbody = document.getElementById('expenses-tbody');
+        expensesTbody.innerHTML = '';
+        
+        document.getElementById('cash-home').value = '0.00';
+        document.getElementById('cash-bank').value = '0.00';
+        const hn = document.getElementById('cash-home-note'); if (hn) hn.value = '';
+        const bn = document.getElementById('cash-bank-note'); if (bn) bn.value = '';
+        
+        // Reset breakdown state
+        state.breakdowns = { home: [], bank: [] };
+        state.currentBreakdownType = '';
+        
+        addReceiptRow();
+        addReceiptRow();
+        addExpenseRow();
+        addExpenseRow();
+        
+        calculateAll();
+      }
+
+      function populateLedger(data) {
+        if (!data) return;
+        
+        const summary = data.summary || {};
+        const details = data.details || [];
+        
+        // Set reconciliation values safely with fallback to 0
+        const cashHome = typeof summary.cashSendToHome === 'number' ? summary.cashSendToHome : 0;
+        const cashBank = typeof summary.cashDepositToBank === 'number' ? summary.cashDepositToBank : 0;
+        
+        document.getElementById('cash-home').value = cashHome.toFixed(2);
+        document.getElementById('cash-bank').value = cashBank.toFixed(2);
+        
+        const homeNoteEl = document.getElementById('cash-home-note');
+        if (homeNoteEl) homeNoteEl.value = summary.cashSendToHomeNote || '';
+        const bankNoteEl = document.getElementById('cash-bank-note');
+        if (bankNoteEl) bankNoteEl.value = summary.cashDepositToBankNote || '';
+        
+        // Parse breakdowns from notes
+        const parsedHome = parseMultipleTransfers(summary.cashSendToHomeNote || '');
+        state.breakdowns.home = parsedHome.entries;
+        
+        const parsedBank = parseMultipleTransfers(summary.cashDepositToBankNote || '');
+        state.breakdowns.bank = parsedBank.entries;
+        
+        const receiptsTbody = document.getElementById('receipts-tbody');
+        while (receiptsTbody.rows.length > 1) {
+          receiptsTbody.deleteRow(1);
+        }
+        
+        const expensesTbody = document.getElementById('expenses-tbody');
+        expensesTbody.innerHTML = '';
+        
+        details.forEach(function(row) {
+          if (row.section === 'Receipt') {
+            if (row.sl === 1) {
+              document.getElementById('r-details-1').value = row.details || 'CASH IN HAND';
+              const r1Amt = typeof row.amount === 'number' ? row.amount : 0;
+              document.getElementById('r-amount-1').value = r1Amt.toFixed(2);
+            } else {
+              addReceiptRow(row.details || '', row.rate, row.qty);
+            }
+          } else if (row.section === 'Expense') {
+            addExpenseRow(row.details || '', row.rate, row.qty);
+          }
+        });
+        
+        if (receiptsTbody.rows.length === 1) addReceiptRow();
+        if (expensesTbody.rows.length === 0) addExpenseRow();
+        
+        calculateAll();
+      }
+
+      function addReceiptRow(details = '', rate = '', qty = '') {
+        const tbody = document.getElementById('receipts-tbody');
+        const index = tbody.rows.length + 1;
+        
+        const tr = document.createElement('tr');
+        tr.id = 'receipt-row-' + index;
+        tr.innerHTML = `
+          <td class="col-sl"><span class="sl-badge">${index}</span></td>
+          <td class="col-details">
+            <div class="autocomplete-container">
+              <input type="text" id="r-details-${index}" class="table-input details-autocomplete" value="${details}" placeholder="Select or type details..." autocomplete="off">
+            </div>
+          </td>
+          <td class="col-rate">
+            <input type="number" id="r-rate-${index}" class="table-input table-input-number" value="${rate}" step="0.01" placeholder="0.00">
+          </td>
+          <td class="col-qty">
+            <input type="number" id="r-qty-${index}" class="table-input table-input-number" value="${qty}" placeholder="0">
+          </td>
+          <td class="col-amount">
+            <span id="r-amount-display-${index}" class="amount-text">₹0.00</span>
+          </td>
+          <td class="col-action" style="text-align: center;">
+            <button class="btn-delete-row" onclick="deleteReceiptRow(this)" title="Delete Row">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+        bindRowEvents('Receipt', index);
+      }
+
+      function addExpenseRow(details = '', rate = '', qty = '') {
+        const tbody = document.getElementById('expenses-tbody');
+        const index = tbody.rows.length + 1;
+        
+        const tr = document.createElement('tr');
+        tr.id = 'expense-row-' + index;
+        tr.innerHTML = `
+          <td class="col-sl"><span class="sl-badge">${index}</span></td>
+          <td class="col-details">
+            <div class="autocomplete-container">
+              <input type="text" id="e-details-${index}" class="table-input details-autocomplete" value="${details}" placeholder="Select or type details..." autocomplete="off">
+            </div>
+          </td>
+          <td class="col-rate">
+            <input type="number" id="e-rate-${index}" class="table-input table-input-number" value="${rate}" step="0.01" placeholder="0.00">
+          </td>
+          <td class="col-qty">
+            <input type="number" id="e-qty-${index}" class="table-input table-input-number" value="${qty}" placeholder="0">
+          </td>
+          <td class="col-amount">
+            <span id="e-amount-display-${index}" class="amount-text">₹0.00</span>
+          </td>
+          <td class="col-action" style="text-align: center;">
+            <button class="btn-delete-row" onclick="deleteExpenseRow(this)" title="Delete Row">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+        bindRowEvents('Expense', index);
+      }
+
+      function deleteReceiptRow(buttonEl) {
+        const row = buttonEl.closest('tr');
+        row.remove();
+        renumberRows('receipts-tbody', 'Receipt');
+        calculateAll();
+      }
+
+      function renumberRows(tbodyId, section) {
+        const tbody = document.getElementById(tbodyId);
+        const rows = tbody.rows;
+        const prefix = section === 'Receipt' ? 'r' : 'e';
+        const startIdx = section === 'Receipt' ? 1 : 0;
+        
+        for (let i = startIdx; i < rows.length; i++) {
+          const sl = i + 1;
+          const row = rows[i];
+          row.querySelector('.sl-badge').innerText = sl;
+          row.querySelector('.details-autocomplete').id = `${prefix}-details-${sl}`;
+          row.querySelector('.col-rate input').id = `${prefix}-rate-${sl}`;
+          row.querySelector('.col-qty input').id = `${prefix}-qty-${sl}`;
+          row.querySelector('.col-amount span').id = `${prefix}-amount-display-${sl}`;
+        }
+      }
+
+      function deleteExpenseRow(buttonEl) {
+        const row = buttonEl.closest('tr');
+        row.remove();
+        renumberRows('expenses-tbody', 'Expense');
+        calculateAll();
+      }
+
+      function bindRowEvents(section, sl) {
+        const prefix = section === 'Receipt' ? 'r' : 'e';
+        const rateInput = document.getElementById(`${prefix}-rate-${sl}`);
+        const qtyInput = document.getElementById(`${prefix}-qty-${sl}`);
+        const detailsInput = document.getElementById(`${prefix}-details-${sl}`);
+        
+        [rateInput, qtyInput].forEach(input => {
+          input.addEventListener('input', calculateAll);
+          input.addEventListener('change', function() {
+            const val = parseFloat(this.value);
+            if (!isNaN(val) && this.id.includes('rate')) {
+              this.value = val.toFixed(2);
+            }
+          });
+        });
+        
+        detailsInput.addEventListener('focus', function() {
+          showAutocompleteList(this, section, sl);
+        });
+        detailsInput.addEventListener('input', function() {
+          showAutocompleteList(this, section, sl);
+        });
+        detailsInput.addEventListener('keydown', function(e) {
+          const container = this.parentElement;
+          let list = container.querySelector('.autocomplete-list');
+          if (!list) return;
+          
+          let items = list.querySelectorAll('.autocomplete-item');
+          if (items.length === 0) return;
+          
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            state.activeAutocompleteIndex++;
+            if (state.activeAutocompleteIndex >= items.length) state.activeAutocompleteIndex = 0;
+            highlightAutocompleteItem(items);
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            state.activeAutocompleteIndex--;
+            if (state.activeAutocompleteIndex < 0) state.activeAutocompleteIndex = items.length - 1;
+            highlightAutocompleteItem(items);
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (state.activeAutocompleteIndex > -1 && items[state.activeAutocompleteIndex]) {
+              items[state.activeAutocompleteIndex].click();
+            }
+          } else if (e.key === 'Escape') {
+            closeAllAutocompleteLists();
+          }
+        });
+      }
+
+      function showAutocompleteList(inputEl, section, sl) {
+        closeAllAutocompleteLists();
+        state.activeAutocompleteIndex = -1;
+        
+        const query = inputEl.value.toLowerCase().trim();
+        const listKey = section === 'Receipt' ? 'receipts' : 'expenses';
+        const options = state.dropdownOptions[listKey];
+        
+        const filtered = options.filter(opt => opt.details.toLowerCase().includes(query));
+        if (filtered.length === 0) return;
+        
+        const container = inputEl.parentElement;
+        const list = document.createElement('ul');
+        list.className = 'autocomplete-list';
+        
+        filtered.forEach(function(item) {
+          const li = document.createElement('li');
+          li.className = 'autocomplete-item';
+          li.innerHTML = `
+            <span class="autocomplete-item-details">${item.details}</span>
+            <span class="autocomplete-item-rate">₹${item.defaultRate.toFixed(2)}</span>
+          `;
+          
+          li.addEventListener('click', function() {
+            inputEl.value = item.details;
+            const prefix = section === 'Receipt' ? 'r' : 'e';
+            const rateInput = document.getElementById(`${prefix}-rate-${sl}`);
+            const qtyInput = document.getElementById(`${prefix}-qty-${sl}`);
+            
+            rateInput.value = item.defaultRate.toFixed(2);
+            if (!qtyInput.value) {
+              qtyInput.value = '1';
+            }
+            
+            calculateAll();
+            closeAllAutocompleteLists();
+            qtyInput.focus();
+          });
+          list.appendChild(li);
+        });
+        container.appendChild(list);
+      }
+
+      function highlightAutocompleteItem(items) {
+        items.forEach((item, idx) => {
+          if (idx === state.activeAutocompleteIndex) {
+            item.style.backgroundColor = '#f1f5f9';
+            item.scrollIntoView({ block: 'nearest' });
+          } else {
+            item.style.backgroundColor = '';
+          }
+        });
+      }
+
+      function closeAllAutocompleteLists() {
+        document.querySelectorAll('.autocomplete-list').forEach(list => list.remove());
+      }
+
+      function calculateAll() {
+        let receiptsTotal = 0;
+        let expensesTotal = 0;
+        
+        const receiptsTbody = document.getElementById('receipts-tbody');
+        const rRows = receiptsTbody.rows;
+        const r1Amt = parseFloat(document.getElementById('r-amount-1').value) || 0;
+        receiptsTotal += r1Amt;
+        
+        for (let i = 1; i < rRows.length; i++) {
+          const sl = i + 1;
+          const rateEl = document.getElementById('r-rate-' + sl);
+          const qtyEl = document.getElementById('r-qty-' + sl);
+          
+          if (rateEl && qtyEl) {
+            const rate = parseFloat(rateEl.value) || 0;
+            const qty = parseFloat(qtyEl.value) || 0;
+            const amt = rate * qty;
+            updateRowAmountDisplay('Receipt', sl, amt);
+            receiptsTotal += amt;
+          }
+        }
+        
+        const expensesTbody = document.getElementById('expenses-tbody');
+        const eRows = expensesTbody.rows;
+        
+        for (let j = 0; j < eRows.length; j++) {
+          const sl = j + 1;
+          const rateEl = document.getElementById('e-rate-' + sl);
+          const qtyEl = document.getElementById('e-qty-' + sl);
+          
+          if (rateEl && qtyEl) {
+            const rate = parseFloat(rateEl.value) || 0;
+            const qty = parseFloat(qtyEl.value) || 0;
+            const amt = rate * qty;
+            updateRowAmountDisplay('Expense', sl, amt);
+            expensesTotal += amt;
+          }
+        }
+        
+        const netBalance = receiptsTotal - expensesTotal;
+        const cashHome = parseFloat(document.getElementById('cash-home').value) || 0;
+        const cashBank = parseFloat(document.getElementById('cash-bank').value) || 0;
+        const closingCash = netBalance - (cashHome + cashBank);
+        
+        document.getElementById('receipts-total-val').innerText = '₹' + receiptsTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        document.getElementById('expenses-total-val').innerText = '₹' + expensesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        
+        document.getElementById('net-balance-val').innerText = netBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        document.getElementById('closing-cash-val').innerText = closingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        
+        const closingCashEl = document.getElementById('closing-cash-val');
+        if (closingCash < 0) {
+          closingCashEl.style.color = 'var(--expense-primary)';
+        } else {
+          closingCashEl.style.color = 'var(--receipt-primary)';
+        }
+      }
+
+      function updateRowAmountDisplay(section, sl, val) {
+        const prefix = section === 'Receipt' ? 'r' : 'e';
+        const display = document.getElementById(`${prefix}-amount-display-${sl}`);
+        if (display) {
+          display.innerText = val > 0 ? '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '₹0.00';
+        }
+      }
+
+      function saveLedger() {
+        if (state.isSaving) return;
+        
+        if (!state.selectedDate) {
+          showToast('Please select a date first', 'error');
+          return;
+        }
+        
+        state.isSaving = true;
+        showLoading(true, 'Saving ledger to local storage...');
+        
+        const receiptsTotal = parseFloat(document.getElementById('receipts-total-val').innerText.replace(/[^\d.]/g, '')) || 0;
+        const expensesTotal = parseFloat(document.getElementById('expenses-total-val').innerText.replace(/[^\d.]/g, '')) || 0;
+        const netBalance = parseFloat(document.getElementById('net-balance-val').innerText.replace(/[^\d.-]/g, '')) || 0;
+        const cashHome = parseFloat(document.getElementById('cash-home').value) || 0;
+        const cashBank = parseFloat(document.getElementById('cash-bank').value) || 0;
+        const closingCash = parseFloat(document.getElementById('closing-cash-val').innerText.replace(/[^\d.-]/g, '')) || 0;
+        
+        const cashHomeNote = document.getElementById('cash-home-note') ? document.getElementById('cash-home-note').value.trim() : '';
+        const cashBankNote = document.getElementById('cash-bank-note') ? document.getElementById('cash-bank-note').value.trim() : '';
+        
+        const summary = {
+          receiptTotal: receiptsTotal,
+          expenseTotal: expensesTotal,
+          netBalance: netBalance,
+          cashSendToHome: cashHome,
+          cashDepositToBank: cashBank,
+          closingCashInHand: closingCash,
+          cashSendToHomeNote: cashHomeNote,
+          cashDepositToBankNote: cashBankNote
+        };
+        
+        const details = [];
+        const r1Details = document.getElementById('r-details-1').value;
+        const r1Amt = parseFloat(document.getElementById('r-amount-1').value) || 0;
+        if (r1Details.trim()) {
+          details.push({ section: 'Receipt', sl: 1, details: r1Details, rate: 0, qty: 1, amount: r1Amt });
+        }
+        
+        const rRows = document.getElementById('receipts-tbody').rows;
+        for (let i = 1; i < rRows.length; i++) {
+          const sl = i + 1;
+          const dVal = document.getElementById('r-details-' + sl).value;
+          const rVal = parseFloat(document.getElementById('r-rate-' + sl).value) || 0;
+          const qVal = parseFloat(document.getElementById('r-qty-' + sl).value) || 0;
+          const aVal = rVal * qVal;
+          if (dVal.trim()) {
+            details.push({ section: 'Receipt', sl: sl, details: dVal, rate: rVal, qty: qVal, amount: aVal });
+          }
+        }
+        
+        const eRows = document.getElementById('expenses-tbody').rows;
+        for (let j = 0; j < eRows.length; j++) {
+          const sl = j + 1;
+          const dVal = document.getElementById('e-details-' + sl).value;
+          const rVal = parseFloat(document.getElementById('e-rate-' + sl).value) || 0;
+          const qVal = parseFloat(document.getElementById('e-qty-' + sl).value) || 0;
+          const aVal = rVal * qVal;
+          if (dVal.trim()) {
+            details.push({ section: 'Expense', sl: sl, details: dVal, rate: rVal, qty: qVal, amount: aVal });
+          }
+        }
+        
+        google.script.run
+          .withSuccessHandler(function(response) {
+            state.isSaving = false;
+            showLoading(false);
+            if (response.success) {
+              showToast('Ledger saved successfully!', 'success');
+              loadExistingDates();
+              setTimeout(function() {
+                showCustomConfirm(
+                  'Daily Ledger saved successfully. Do you want to email the PDF copy?',
+                  function() {
+                    openEmailModal('daily');
+                  },
+                  {
+                    type: 'success',
+                    title: 'Ledger Saved',
+                    okText: 'Yes, Email PDF',
+                    cancelText: 'No, Close'
+                  }
+                );
+              }, 600);
+            } else {
+              showToast('Save failed', 'error');
+            }
+          })
+          .withFailureHandler(function(err) {
+            state.isSaving = false;
+            showLoading(false);
+            showToast('Error: ' + err.message, 'error');
+          })
+          .saveRojnamcha(state.selectedDate, summary, details);
+      }
+
+      function handleAddDropdownOption() {
+        const section = document.getElementById('option-section').value;
+        const details = document.getElementById('option-details').value.trim();
+        const rate = parseFloat(document.getElementById('option-rate').value) || 0;
+        
+        if (!details) {
+          showToast('Details description cannot be empty', 'error');
+          return;
+        }
+        
+        showLoading(true, 'Adding option...');
+        google.script.run
+          .withSuccessHandler(function() {
+            showLoading(false);
+            document.getElementById('option-details').value = '';
+            document.getElementById('option-rate').value = '';
+            showToast('Option added successfully', 'success');
+            loadDropdownOptions();
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to add option: ' + err.message, 'error');
+          })
+          .saveDropdownOption(section, details, rate);
+      }
+
+      // Show Custom Confirm Modal Dialog with dynamic styling/texts
+      function showCustomConfirm(message, callback, options = {}) {
+        confirmCallback = callback;
+        document.getElementById('confirm-modal-message').textContent = message;
+        
+        const modal = document.getElementById('confirm-modal');
+        const modalContent = modal.querySelector('.modal-content');
+        const modalHeader = modal.querySelector('.modal-header');
+        const modalTitle = modal.querySelector('.modal-header h3');
+        const btnOk = document.getElementById('btn-confirm-ok');
+        const btnCancel = document.getElementById('btn-confirm-cancel');
+        
+        // Defaults: Delete confirmation style
+        const type = options.type || 'delete'; // delete, success, info, warning
+        const title = options.title || 'Confirm Delete';
+        const okText = options.okText || 'Delete';
+        const cancelText = options.cancelText || 'Cancel';
+        
+        // Update texts
+        if (modalTitle) {
+          const textNode = Array.from(modalTitle.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+          if (textNode) {
+            textNode.textContent = ' ' + title;
+          } else {
+            modalTitle.textContent = title;
+          }
+        }
+        
+        btnOk.innerText = okText;
+        btnCancel.innerText = cancelText;
+        
+        // Apply styling based on type
+        if (type === 'delete') {
+          modalContent.style.borderTop = '4px solid var(--expense-primary)';
+          modalHeader.style.backgroundColor = 'var(--expense-bg)';
+          modalHeader.style.borderBottom = '1px solid var(--expense-border)';
+          if (modalTitle) modalTitle.style.color = 'var(--expense-text)';
+          btnOk.className = 'btn-new';
+          btnOk.style.backgroundColor = 'var(--expense-primary)';
+          btnOk.style.boxShadow = '0 4px 6px -1px rgba(239, 68, 68, 0.2)';
+        } else if (type === 'success') {
+          modalContent.style.borderTop = '4px solid var(--receipt-primary)';
+          modalHeader.style.backgroundColor = 'var(--receipt-bg)';
+          modalHeader.style.borderBottom = '1px solid var(--receipt-border)';
+          if (modalTitle) modalTitle.style.color = 'var(--receipt-text)';
+          btnOk.className = 'btn-save';
+          btnOk.style.backgroundColor = 'var(--receipt-primary)';
+          btnOk.style.boxShadow = '0 4px 6px -1px rgba(16, 185, 129, 0.2)';
+        } else {
+          // info/general styling
+          modalContent.style.borderTop = '4px solid var(--primary-color)';
+          modalHeader.style.backgroundColor = 'var(--header-bg)';
+          modalHeader.style.borderBottom = '1px solid var(--border-color)';
+          if (modalTitle) modalTitle.style.color = 'var(--text-dark)';
+          btnOk.className = 'btn-save';
+          btnOk.style.backgroundColor = 'var(--primary-color)';
+          btnOk.style.boxShadow = '0 4px 6px -1px rgba(79, 70, 229, 0.2)';
+        }
+        
+        modal.classList.add('active');
+      }
+
+      let promptCallback = null;
+
+      // Show Custom Prompt Modal Dialog
+      function showCustomPrompt(message, defaultValue, callback, options = {}) {
+        promptCallback = callback;
+        
+        const modal = document.getElementById('prompt-modal');
+        const input = document.getElementById('prompt-modal-input');
+        const titleEl = document.getElementById('prompt-modal-title');
+        const labelEl = document.getElementById('prompt-modal-input-label');
+        const msgEl = document.getElementById('prompt-modal-message');
+        const btnOk = document.getElementById('btn-prompt-ok');
+        const btnCancel = document.getElementById('btn-prompt-cancel');
+        
+        const title = options.title || 'Input Required';
+        const label = options.label || 'Value';
+        const type = options.type || 'text'; // text, password
+        const okText = options.okText || 'Submit';
+        const cancelText = options.cancelText || 'Cancel';
+        
+        // Set content
+        if (titleEl) {
+          const textNode = Array.from(titleEl.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+          if (textNode) {
+            textNode.textContent = ' ' + title;
+          } else {
+            titleEl.textContent = title;
+          }
+        }
+        if (labelEl) labelEl.innerText = label;
+        if (msgEl) msgEl.innerText = message;
+        
+        input.type = type;
+        input.value = defaultValue || '';
+        input.placeholder = options.placeholder || `Enter ${label.toLowerCase()}...`;
+        
+        btnOk.innerText = okText;
+        btnCancel.innerText = cancelText;
+        
+        modal.classList.add('active');
+        
+        // Auto-focus input
+        setTimeout(() => input.focus(), 150);
+      }
+
+      function deleteDropdownOption(section, details) {
+        showCustomConfirm('Are you sure you want to delete "' + details + '"?', function() {
+          showLoading(true, 'Deleting option...');
+          google.script.run
+            .withSuccessHandler(function() {
+              showLoading(false);
+              showToast('Option deleted', 'success');
+              loadDropdownOptions();
+            })
+            .withFailureHandler(function(err) {
+              showLoading(false);
+              showToast('Failed to delete option: ' + err.message, 'error');
+            })
+            .deleteDropdownOption(section, details);
+        });
+      }
+
+      function renderDropdownManagerList() {
+        const list = document.getElementById('dropdown-options-list');
+        list.innerHTML = `
+          <li class="option-manager-header">
+            <div>Particulars / Details</div>
+            <div style="text-align: center;">Type</div>
+            <div style="text-align: right;">Rate (₹)</div>
+            <div style="text-align: right;">Actions</div>
+          </li>
+        `;
+        const renderRow = (section, item) => {
+          const li = document.createElement('li');
+          li.className = 'option-manager-row';
+          li.innerHTML = `
+            <span class="option-manager-details" title="${item.details}">${item.details}</span>
+            <span class="option-manager-badge option-manager-badge-${section.toLowerCase()}">${section}</span>
+            <span style="font-weight:600; text-align: right; width: 100%;">₹${item.defaultRate.toFixed(2)}</span>
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end; width: 100%;">
+              <button class="btn-delete-option" style="color: var(--primary-color);" onclick="startEditDropdownOption('${section}', '${item.details.replace(/'/g, "\\'")}', ${item.defaultRate}, this)">Edit</button>
+              <button class="btn-delete-option" onclick="deleteDropdownOption('${section}', '${item.details.replace(/'/g, "\\'")}')">Remove</button>
+            </div>
+          `;
+          list.appendChild(li);
+        };
+        state.dropdownOptions.receipts.forEach(item => renderRow('Receipt', item));
+        state.dropdownOptions.expenses.forEach(item => renderRow('Expense', item));
+      }
+
+      function startEditDropdownOption(section, details, rate, buttonEl) {
+        const li = buttonEl.closest('li');
+        li.dataset.oldDetails = details;
+        
+        li.innerHTML = `
+          <div style="display: contents;">
+            <input type="text" class="table-input edit-opt-name" value="${details}" style="padding: 0.25rem 0.5rem; font-size: 0.85rem; border: 1px solid var(--border-color); height: 32px; border-radius: 0.25rem; width: 100%;">
+            <span class="option-manager-badge option-manager-badge-${section.toLowerCase()}" style="text-align: center; display: inline-block; width: 100%;">${section}</span>
+            <input type="number" class="table-input edit-opt-rate" value="${rate}" style="padding: 0.25rem 0.5rem; font-size: 0.85rem; text-align: right; border: 1px solid var(--border-color); height: 32px; border-radius: 0.25rem; width: 100%;">
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end; width: 100%;">
+              <button class="btn-delete-option" onclick="saveDropdownOptionInline('${section}', this)" style="color: var(--receipt-primary); font-weight:700;">Save</button>
+              <button class="btn-delete-option" onclick="loadDropdownOptions()" style="color: var(--text-muted);">Cancel</button>
+            </div>
+          </div>
+        `;
+      }
+
+      function saveDropdownOptionInline(section, buttonEl) {
+        const li = buttonEl.closest('li');
+        const oldDetails = li.dataset.oldDetails;
+        const newDetails = li.querySelector('.edit-opt-name').value.trim();
+        const newRate = parseFloat(li.querySelector('.edit-opt-rate').value) || 0;
+        
+        if (!newDetails) {
+          showToast('Details description cannot be empty', 'error');
+          return;
+        }
+        
+        showLoading(true, 'Updating option...');
+        google.script.run
+          .withSuccessHandler(function() {
+            showLoading(false);
+            showToast('Option updated successfully', 'success');
+            loadDropdownOptions();
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to update option: ' + err.message, 'error');
+          })
+          .updateDropdownOption(section, oldDetails, newDetails, newRate);
+      }
+
+      function setupEventListeners() {
+        document.querySelectorAll('input').forEach(input => {
+          if (input.type === 'number') {
+            input.addEventListener('input', calculateAll);
+          }
+        });
+        
+        const logoutBtn = document.getElementById('btn-logout');
+        if (logoutBtn) {
+          logoutBtn.addEventListener('click', handleLogout);
+        }
+        
+        document.addEventListener('click', function(e) {
+          if (!e.target.classList.contains('details-autocomplete')) {
+            closeAllAutocompleteLists();
+          }
+        });
+        const profileModal = document.getElementById('profile-modal');
+        document.getElementById('btn-open-profile').addEventListener('click', () => profileModal.classList.add('active'));
+        document.getElementById('btn-close-profile-modal').addEventListener('click', () => profileModal.classList.remove('active'));
+        
+        profileModal.addEventListener('click', function(e) {
+          if (e.target === profileModal) profileModal.classList.remove('active');
+        });
+        
+        // Confirm Dialog actions
+        const confirmModal = document.getElementById('confirm-modal');
+        document.getElementById('btn-confirm-ok').addEventListener('click', function() {
+          confirmModal.classList.remove('active');
+          if (confirmCallback) {
+            confirmCallback();
+            confirmCallback = null;
+          }
+        });
+        const closeConfirm = function() {
+          confirmModal.classList.remove('active');
+          confirmCallback = null;
+        };
+        document.getElementById('btn-confirm-cancel').addEventListener('click', closeConfirm);
+        document.getElementById('btn-close-confirm-modal').addEventListener('click', closeConfirm);
+        confirmModal.addEventListener('click', function(e) {
+          if (e.target === confirmModal) closeConfirm();
+        });
+
+        // Prompt Dialog actions
+        const promptModal = document.getElementById('prompt-modal');
+        const promptInput = document.getElementById('prompt-modal-input');
+        
+        const submitPrompt = function() {
+          const val = promptInput.value;
+          promptModal.classList.remove('active');
+          if (promptCallback) {
+            promptCallback(val);
+            promptCallback = null;
+          }
+        };
+        
+        const closePrompt = function() {
+          promptModal.classList.remove('active');
+          if (promptCallback) {
+            promptCallback(null);
+            promptCallback = null;
+          }
+        };
+        
+        document.getElementById('btn-prompt-ok').addEventListener('click', submitPrompt);
+        document.getElementById('btn-prompt-cancel').addEventListener('click', closePrompt);
+        document.getElementById('btn-close-prompt-modal').addEventListener('click', closePrompt);
+        promptModal.addEventListener('click', function(e) {
+          if (e.target === promptModal) closePrompt();
+        });
+        
+        promptInput.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            submitPrompt();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closePrompt();
+          }
+        });
+        
+        document.getElementById('btn-save-profile').addEventListener('click', saveCompanyProfile);
+        document.getElementById('btn-save-ledger').addEventListener('click', saveLedger);
+
+        const logoInput = document.getElementById('profile-logo-input');
+        logoInput.addEventListener('change', function(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          
+          if (file.size > 5 * 1024 * 1024) {
+            showToast('Image file size must be less than 5MB', 'error');
+            this.value = '';
+            return;
+          }
+          
+          showLoading(true, 'Optimizing logo image...');
+          resizeImageToMax(file, 160, 80, function(dataUrl) {
+            showLoading(false);
+            state.companyProfile.companyLogo = dataUrl;
+            document.getElementById('profile-logo-url').value = '';
+            updateModalLogoPreview(dataUrl);
+            showToast('Logo optimized & ready to save', 'success');
+          });
+        });
+
+        const logoUrlField = document.getElementById('profile-logo-url');
+        logoUrlField.addEventListener('input', function(e) {
+          const val = this.value.trim();
+          if (val) {
+            state.companyProfile.companyLogo = val;
+            updateModalLogoPreview(val);
+          } else {
+            state.companyProfile.companyLogo = '';
+            updateModalLogoPreview('');
+          }
+        });
+
+        document.getElementById('btn-remove-logo').addEventListener('click', function() {
+          state.companyProfile.companyLogo = '';
+          updateModalLogoPreview('');
+          showToast('Logo removed. Click Save to apply.', 'info');
+        });
+        
+        document.getElementById('btn-add-receipt').addEventListener('click', () => {
+          addReceiptRow();
+          calculateAll();
+        });
+        document.getElementById('btn-add-expense').addEventListener('click', () => {
+          addExpenseRow();
+          calculateAll();
+        });
+        
+        document.getElementById('btn-new-ledger').addEventListener('click', function() {
+          const today = new Date().toISOString().split('T')[0];
+          document.getElementById('ledger-date').value = today;
+          handleDateChange(today);
+        });
+        
+        document.getElementById('btn-print-ledger').addEventListener('click', printActiveDailyLedger);
+        
+        // Email PDF daily triggers
+        document.getElementById('btn-email-ledger-daily').addEventListener('click', () => openEmailModal('daily'));
+
+        // Sidebar Collapse Toggle
+        document.getElementById('btn-toggle-sidebar').addEventListener('click', toggleSidebar);
+        
+        // Theme Toggle Button
+        const themeBtn = document.getElementById('btn-toggle-theme');
+        if (themeBtn) {
+          themeBtn.addEventListener('click', function() {
+            document.body.classList.toggle('dark-theme');
+            const isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('rojnamcha-theme', isDark ? 'dark' : 'light');
+            updateThemeUI();
+            showToast(isDark ? 'Dark Mode Activated' : 'Light Mode Activated', 'success');
+          });
+          // Update the button UI icon based on active theme
+          updateThemeUI();
+        }
+        
+        // Reports range report triggers
+        document.getElementById('btn-generate-report').addEventListener('click', generateRangeReport);
+        document.getElementById('btn-print-report').addEventListener('click', printRangeReport);
+        document.getElementById('btn-print-range-detailed').addEventListener('click', printDetailedRangeLedger);
+        document.getElementById('btn-email-ledger-range').addEventListener('click', () => openEmailModal('range'));
+
+        // Audit tab event listeners
+        document.getElementById('btn-generate-audit').addEventListener('click', generateAuditReport);
+        document.getElementById('btn-print-all-home-slips').addEventListener('click', () => printAllRangeSlips('home'));
+        document.getElementById('btn-print-all-bank-slips').addEventListener('click', () => printAllRangeSlips('bank'));
+        
+        // Slip modal
+        const slipModal = document.getElementById('slip-modal');
+        document.getElementById('btn-close-slip-modal').addEventListener('click', () => slipModal.classList.remove('active'));
+        document.getElementById('btn-cancel-slip').addEventListener('click', () => slipModal.classList.remove('active'));
+        slipModal.addEventListener('click', function(e) { if (e.target === slipModal) slipModal.classList.remove('active'); });
+        document.getElementById('btn-print-slip').addEventListener('click', printSlip);
+
+        // Email Modal close and submit triggers
+        const emailModal = document.getElementById('email-ledger-modal');
+        document.getElementById('btn-close-email-modal').addEventListener('click', closeEmailModal);
+        document.getElementById('btn-cancel-email').addEventListener('click', closeEmailModal);
+        document.getElementById('btn-send-email-submit').addEventListener('click', sendEmailSubmit);
+        emailModal.addEventListener('click', function(e) { if (e.target === emailModal) closeEmailModal(); });
+        
+        ['report-start-date', 'report-end-date'].forEach(id => {
+          document.getElementById(id).addEventListener('change', updateReportDateRangeLabel);
+        });
+
+        // Auto-open inline CASH DRAWER reconciliation section when cash amount inputs are clicked/focused
+        ['home', 'bank'].forEach(function(type) {
+          const amtInput = document.getElementById('cash-' + type);
+          if (!amtInput) return;
+
+          amtInput.addEventListener('focus', function() {
+            openCashDrawer(type);
+          });
+          amtInput.addEventListener('click', function() {
+            openCashDrawer(type);
+          });
+        });
+
+        // Close drawer section listeners
+        const btnCloseSection = document.getElementById('btn-close-drawer-section');
+        if (btnCloseSection) btnCloseSection.addEventListener('click', closeCashDrawer);
+        const btnCancelSection = document.getElementById('btn-close-drawer-cancel');
+        if (btnCancelSection) btnCancelSection.addEventListener('click', closeCashDrawer);
+      }
+
+      function showLoading(show, message = 'Processing...') {
+        state.isLoading = show;
+        const overlay = document.getElementById('loading-overlay');
+        const text = document.getElementById('loading-text');
+        if (show) {
+          text.innerText = message;
+          overlay.classList.add('active');
+        } else {
+          overlay.classList.remove('active');
+        }
+      }
+
+      function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        
+        let title = 'Information';
+        let iconSvg = '';
+        
+        if (type === 'success') {
+          title = 'Success';
+          iconSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`;
+        } else if (type === 'error') {
+          title = 'Error';
+          iconSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+        } else if (type === 'warning') {
+          title = 'Warning';
+          iconSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
+        } else {
+          title = 'Info';
+          iconSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+        }
+        
+        toast.innerHTML = `
+          <div class="toast-icon">${iconSvg}</div>
+          <div class="toast-content">
+            <div class="toast-title">${title}</div>
+            <div class="toast-message">${message}</div>
+          </div>
+          <button class="toast-close" aria-label="Close message">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          <div class="toast-progress"></div>
+        `;
+        
+        toast.querySelector('.toast-close').addEventListener('click', function() {
+          dismissToast(toast);
+        });
+        
+        container.appendChild(toast);
+        
+        const timeoutId = setTimeout(function() {
+          dismissToast(toast);
+        }, 4000);
+        
+        toast.dataset.timeoutId = timeoutId;
+      }
+
+      function dismissToast(toast) {
+        if (toast.classList.contains('dismissed')) return;
+        toast.classList.add('dismissed');
+        
+        const timeoutId = toast.dataset.timeoutId;
+        if (timeoutId) {
+          clearTimeout(parseInt(timeoutId));
+        }
+        
+        toast.style.animation = 'toastSlideOut 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
+        setTimeout(function() {
+          toast.remove();
+        }, 300);
+      }
+
+      function formatDateReadable(dateStr) {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+        const day = date.getDate();
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${day}-${months[date.getMonth()]}-${date.getFullYear()}`;
+      }
+
+      // Collapsible Sidebar Handler
+      function toggleSidebar() {
+        const sidebar = document.getElementById('app-sidebar');
+        if (sidebar) sidebar.classList.toggle('collapsed');
+      }
+
+      // Theme toggle UI updater
+      function updateThemeUI() {
+        const themeIcon = document.getElementById('theme-icon');
+        const themeBtn = document.getElementById('btn-toggle-theme');
+        if (!themeIcon || !themeBtn) return;
+        
+        const isDark = document.body.classList.contains('dark-theme');
+        if (isDark) {
+          themeBtn.title = 'Switch to Light Mode';
+          themeIcon.innerHTML = `
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          `;
+        } else {
+          themeBtn.title = 'Switch to Dark Mode';
+          themeIcon.innerHTML = `
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          `;
+        }
+      }
+
+      // Workspace tab navigation
+      function setupNavigation() {
+        const tabDaily = document.getElementById('tab-daily');
+        const tabReports = document.getElementById('tab-reports');
+        const tabAudit = document.getElementById('tab-audit');
+        const tabDropdowns = document.getElementById('tab-dropdowns');
+        const tabUsers = document.getElementById('tab-users');
+        
+        const dailyView = document.getElementById('daily-workspace-view');
+        const reportsView = document.getElementById('reports-workspace-view');
+        const auditView = document.getElementById('audit-workspace-view');
+        const dropdownsView = document.getElementById('dropdowns-workspace-view');
+        const usersView = document.getElementById('users-workspace-view');
+        
+        const dailyControls = document.getElementById('sidebar-daily-controls');
+        const reportsControls = document.getElementById('sidebar-reports-controls');
+        const auditControls = document.getElementById('sidebar-audit-controls');
+        const dropdownsControls = document.getElementById('sidebar-dropdowns-controls');
+        const usersControls = document.getElementById('sidebar-users-controls');
+        
+        const dailyFooter = document.getElementById('daily-footer-bar');
+        const reportsFooter = document.getElementById('reports-footer-bar');
+        
+        const dateLabel = document.getElementById('display-date-label');
+        const dateDisplay = document.getElementById('display-date');
+
+        function switchTab(active) {
+          // Reset all
+          [tabDaily, tabReports, tabAudit, tabDropdowns, tabUsers].forEach(t => { if (t) t.classList.remove('active'); });
+          [dailyView, reportsView, auditView, dropdownsView, usersView].forEach(v => { if (v) v.style.display = 'none'; });
+          [dailyControls, reportsControls, auditControls, dropdownsControls, usersControls].forEach(c => { if (c) c.style.display = 'none'; });
+          [dailyFooter, reportsFooter].forEach(f => { if (f) f.style.display = 'none'; });
+          active.classList.add('active');
+        }
+        
+        tabDaily.addEventListener('click', function() {
+          switchTab(tabDaily);
+          dailyView.style.display = 'flex';
+          dailyControls.style.display = 'block';
+          dailyFooter.style.display = 'flex';
+          dateLabel.innerText = 'LEDGER DATE';
+          dateDisplay.innerText = formatDateReadable(state.selectedDate);
+        });
+        
+        tabReports.addEventListener('click', function() {
+          switchTab(tabReports);
+          reportsView.style.display = 'flex';
+          reportsControls.style.display = 'block';
+          reportsFooter.style.display = 'flex';
+          dateLabel.innerText = 'REPORT SCOPE';
+          updateReportDateRangeLabel();
+          
+          const startInput = document.getElementById('report-start-date');
+          const endInput = document.getElementById('report-end-date');
+          if (!startInput.value || !endInput.value) {
+            const today = new Date();
+            const y = today.getFullYear();
+            const m = today.getMonth();
+            const firstDay = new Date(y, m, 1).toISOString().split('T')[0];
+            const lastDay = today.toISOString().split('T')[0];
+            startInput.value = firstDay;
+            endInput.value = lastDay;
+            updateReportDateRangeLabel();
+          }
+        });
+
+        tabAudit.addEventListener('click', function() {
+          switchTab(tabAudit);
+          auditView.style.display = 'flex';
+          auditControls.style.display = 'block';
+          dateLabel.innerText = 'AUDIT RANGE';
+          
+          const startInput = document.getElementById('audit-start-date');
+          const endInput = document.getElementById('audit-end-date');
+          if (!startInput.value || !endInput.value) {
+            const today = new Date();
+            const y = today.getFullYear();
+            const m = today.getMonth();
+            const firstDay = new Date(y, m, 1).toISOString().split('T')[0];
+            const lastDay = today.toISOString().split('T')[0];
+            startInput.value = firstDay;
+            endInput.value = lastDay;
+          }
+          const startVal = document.getElementById('audit-start-date').value;
+          const endVal = document.getElementById('audit-end-date').value;
+          if (startVal && endVal) {
+            dateDisplay.innerText = formatDateReadable(startVal) + ' → ' + formatDateReadable(endVal);
+          } else {
+            dateDisplay.innerText = 'Select Range';
+          }
+        });
+
+        tabDropdowns.addEventListener('click', function() {
+          switchTab(tabDropdowns);
+          dropdownsView.style.display = 'flex';
+          dropdownsControls.style.display = 'block';
+          dateLabel.innerText = 'SETTINGS';
+          dateDisplay.innerText = 'Standard Items';
+          loadDropdownOptions();
+        });
+
+        if (tabUsers) {
+          tabUsers.addEventListener('click', function() {
+            switchTab(tabUsers);
+            if (usersView) usersView.style.display = 'flex';
+            if (usersControls) usersControls.style.display = 'block';
+            dateLabel.innerText = 'SETTINGS';
+            dateDisplay.innerText = 'User Management';
+            loadUsersManagerList();
+          });
+        }
+        
+        // Initialize active tab state explicitly
+        if (tabDaily) tabDaily.click();
+      }
+
+      // Update Range Label
+      function updateReportDateRangeLabel() {
+        const startVal = document.getElementById('report-start-date').value;
+        const endVal = document.getElementById('report-end-date').value;
+        const dateDisplay = document.getElementById('display-date');
+        const printRange = document.getElementById('print-report-range');
+        
+        if (startVal && endVal) {
+          dateDisplay.innerText = `${formatDateReadable(startVal)} to ${formatDateReadable(endVal)}`;
+          if (printRange) {
+            printRange.innerText = `Range: ${formatDateReadable(startVal)} to ${formatDateReadable(endVal)}`;
+          }
+        } else {
+          dateDisplay.innerText = 'No Range Selected';
+          if (printRange) {
+            printRange.innerText = 'Range: Not Selected';
+          }
+        }
+      }
+
+      // Generate range-based summary report from mock database
+      function generateRangeReport() {
+        const startDate = document.getElementById('report-start-date').value;
+        const endDate = document.getElementById('report-end-date').value;
+        
+        if (!startDate || !endDate) {
+          showToast('Please select both Start and End dates', 'error');
+          return;
+        }
+        
+        if (new Date(startDate) > new Date(endDate)) {
+          showToast('Start Date cannot be after End Date', 'error');
+          return;
+        }
+        
+        showLoading(true, 'Generating ledger report...');
+        google.script.run
+          .withSuccessHandler(function(records) {
+            showLoading(false);
+            renderRangeReport(records);
+            updateReportDateRangeLabel();
+            showToast(`Report compiled successfully with ${records.length} records.`, 'success');
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to compile report: ' + err.message, 'error');
+          })
+          .getRangeReport(startDate, endDate);
+      }
+
+      // Render summary items & calculate KPIs
+      function renderRangeReport(records) {
+        const tbody = document.getElementById('reports-tbody');
+        tbody.innerHTML = '';
+        
+        const countEl = document.getElementById('report-records-count');
+        if (countEl) {
+          countEl.innerText = records.length + ' record' + (records.length !== 1 ? 's' : '');
+        }
+        
+        let totalReceipts = 0;
+        let totalExpenses = 0;
+        let endingClosingCash = 0;
+        
+        if (records.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-muted); font-size: 0.9rem;">No saved entries found within the selected date range.</td></tr>';
+          document.getElementById('report-kpi-receipts').innerText = '0.00';
+          document.getElementById('report-kpi-expenses').innerText = '0.00';
+          document.getElementById('report-kpi-net').innerText = '0.00';
+          document.getElementById('report-kpi-closing').innerText = '0.00';
+          return;
+        }
+        
+        records.forEach(function(rec) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; font-weight:600;">${formatDateReadable(rec.date)}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">₹${rec.openingCash.toFixed(2)}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; color: var(--receipt-text); font-weight: 500;">₹${rec.receipts.toFixed(2)}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; color: var(--expense-text); font-weight: 500;">₹${rec.expenses.toFixed(2)}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">₹${rec.cashSendToHome.toFixed(2)}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace;">₹${rec.cashDepositToBank.toFixed(2)}</td>
+            <td style="padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; text-align: right; font-family: monospace; font-weight:700; color: ${rec.closingCashInHand >= 0 ? 'var(--receipt-primary)' : 'var(--expense-primary)'}">₹${rec.closingCashInHand.toFixed(2)}</td>
+          `;
+          tbody.appendChild(tr);
+          
+          totalReceipts += rec.receipts;
+          totalExpenses += rec.expenses;
+        });
+        
+        endingClosingCash = records[records.length - 1].closingCashInHand;
+        
+        document.getElementById('report-kpi-receipts').innerText = totalReceipts.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        document.getElementById('report-kpi-expenses').innerText = totalExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        document.getElementById('report-kpi-net').innerText = (totalReceipts - totalExpenses).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        
+        const closingKpiEl = document.getElementById('report-kpi-closing');
+        closingKpiEl.innerText = endingClosingCash.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        
+        if (endingClosingCash < 0) {
+          closingKpiEl.parentElement.style.color = 'var(--expense-primary)';
+        } else {
+          closingKpiEl.parentElement.style.color = '#1e40af';
+        }
+      }
+
+      // Print Range Report clean wrapper
+      function printRangeReport() {
+        const sidebar = document.getElementById('app-sidebar');
+        const wasCollapsed = sidebar.classList.contains('collapsed');
+        
+        if (!wasCollapsed) {
+          sidebar.classList.add('collapsed');
+        }
+        
+        window.print();
+        
+        if (!wasCollapsed) {
+          setTimeout(() => sidebar.classList.remove('collapsed'), 600);
+        }
+      }
+
+      function getPreviousDateStr(dateStr) {
+        const date = new Date(dateStr);
+        date.setDate(date.getDate() - 1);
+        return date.toISOString().split('T')[0];
+      }
+
+      // =========================================================================
+      // CASH AUDIT & SLIPS FUNCTIONS
+      // =========================================================================
+
+      // Online payment keyword detection
+      const ONLINE_KEYWORDS = ['online', 'gpay', 'phonepe', 'paytm', 'upi', 'digital', 'neft', 'rtgs', 'imps', 'bhim', 'netbanking', 'internet pay', 'net pay'];
+
+      function isOnlinePayment(details) {
+        if (!details) return false;
+        const lower = details.toLowerCase();
+        return ONLINE_KEYWORDS.some(kw => lower.includes(kw));
+      }
+
+      // Convert number to Indian words (crore/lakh)
+      function convertNumberToWords(num) {
+        if (num === 0) return 'Zero';
+        const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+                      'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+                      'Seventeen', 'Eighteen', 'Nineteen'];
+        const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+        function convertChunk(n) {
+          if (n === 0) return '';
+          if (n < 20) return ones[n];
+          if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+          return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + convertChunk(n % 100) : '');
+        }
+
+        const intPart = Math.floor(Math.abs(num));
+        const decPart = Math.round((Math.abs(num) - intPart) * 100);
+
+        let result = '';
+        const crores = Math.floor(intPart / 10000000);
+        const lakhs = Math.floor((intPart % 10000000) / 100000);
+        const thousands = Math.floor((intPart % 100000) / 1000);
+        const remainder = intPart % 1000;
+
+        if (crores > 0) result += convertChunk(crores) + ' Crore ';
+        if (lakhs > 0) result += convertChunk(lakhs) + ' Lakh ';
+        if (thousands > 0) result += convertChunk(thousands) + ' Thousand ';
+        if (remainder > 0) result += convertChunk(remainder);
+
+        result = result.trim();
+        if (decPart > 0) result += ' and ' + convertChunk(decPart) + ' Paise';
+        return (num < 0 ? 'Minus ' : '') + result;
+      }
+
+      // Generate audit report from localStorage records
+      function generateAuditReport() {
+        const startDate = document.getElementById('audit-start-date').value;
+        const endDate = document.getElementById('audit-end-date').value;
+
+        if (!startDate || !endDate) {
+          showToast('Please select both Start and End dates', 'error');
+          return;
+        }
+        if (new Date(startDate) > new Date(endDate)) {
+          showToast('Start Date cannot be after End Date', 'error');
+          return;
+        }
+
+        showLoading(true, 'Generating audit report...');
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            showLoading(false);
+            if (result) {
+              const homeRecords = [];
+              const bankRecords = [];
+              
+              result.summaries.forEach(function(sum) {
+                if (sum.cashSendToHome > 0) {
+                  homeRecords.push({
+                    date: sum.date,
+                    amount: sum.cashSendToHome,
+                    note: sum.cashSendToHomeNote || ''
+                  });
+                }
+                if (sum.cashDepositToBank > 0) {
+                  bankRecords.push({
+                    date: sum.date,
+                    amount: sum.cashDepositToBank,
+                    note: sum.cashDepositToBankNote || ''
+                  });
+                }
+              });
+              
+              state.auditHomeRecords = homeRecords;
+              state.auditBankRecords = bankRecords;
+              
+              const btnHomeSlips = document.getElementById('btn-print-all-home-slips');
+              if (btnHomeSlips) {
+                btnHomeSlips.style.display = homeRecords.length > 0 ? 'inline-flex' : 'none';
+              }
+              const btnBankSlips = document.getElementById('btn-print-all-bank-slips');
+              if (btnBankSlips) {
+                btnBankSlips.style.display = bankRecords.length > 0 ? 'inline-flex' : 'none';
+              }
+
+              renderAuditTables(homeRecords, bankRecords, result.onlinePayments);
+              
+              // Update date display range
+              const dd = document.getElementById('display-date');
+              if (dd) dd.innerText = formatDateReadable(startDate) + ' → ' + formatDateReadable(endDate);
+              
+              const totalHome = homeRecords.reduce((s, r) => s + r.amount, 0);
+              const totalBank = bankRecords.reduce((s, r) => s + r.amount, 0);
+              showToast('Audit report generated: ' + (homeRecords.length + bankRecords.length) + ' cash transfers, ' + result.onlinePayments.length + ' online payments.', 'success');
+            }
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to generate audit report: ' + err.message, 'error');
+          })
+          .getRangeAuditData(startDate, endDate);
+      }
+
+      function renderAuditTables(homeRecords, bankRecords, onlineRecords) {
+        const totalHome = homeRecords.reduce((s, r) => s + r.amount, 0);
+        const totalBank = bankRecords.reduce((s, r) => s + r.amount, 0);
+        const totalOnline = onlineRecords.reduce((s, r) => s + r.amount, 0);
+
+        document.getElementById('audit-kpi-home').innerText = totalHome.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        document.getElementById('audit-kpi-bank').innerText = totalBank.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        document.getElementById('audit-kpi-online').innerText = totalOnline.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+        // Home table
+        const homeTbody = document.getElementById('audit-home-tbody');
+        document.getElementById('audit-home-count').innerText = homeRecords.length + ' record' + (homeRecords.length !== 1 ? 's' : '');
+        if (homeRecords.length === 0) {
+          homeTbody.innerHTML = '<tr><td colspan="5" style="padding:2rem;text-align:center;color:var(--text-muted);">No Cash Home transfers in selected range.</td></tr>';
+        } else {
+          homeTbody.innerHTML = '';
+          homeRecords.forEach(function(rec, idx) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);text-align:center;color:var(--text-muted);font-size:0.85rem;">${idx + 1}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);font-weight:600;">${formatDateReadable(rec.date)}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);text-align:right;font-family:monospace;font-weight:700;color:#7c3aed;">₹${rec.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);font-size:0.87rem;color:var(--text-muted);">${rec.note || '<em style="opacity:0.5;">—</em>'}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);text-align:center;">
+                <button onclick="showSlipModal('home','${rec.date}',${rec.amount},'${(rec.note||'').replace(/'/g,"\\'")}')"
+                  style="background:#7c3aed;color:white;border:none;padding:0.3rem 0.75rem;border-radius:0.375rem;font-size:0.8rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:0.3rem;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+                  Voucher
+                </button>
+              </td>
+            `;
+            homeTbody.appendChild(tr);
+          });
+          // Total row
+          const tfoot = document.createElement('tr');
+          tfoot.innerHTML = `<td colspan="2" style="padding:0.75rem 1rem;font-weight:700;text-transform:uppercase;font-size:0.85rem;background:var(--header-bg);border-top:2px solid var(--border-color);">Total Cash Sent Home</td><td style="padding:0.75rem 1rem;text-align:right;font-weight:800;font-family:monospace;color:#7c3aed;background:var(--header-bg);border-top:2px solid var(--border-color);">₹${totalHome.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td><td colspan="2" style="background:var(--header-bg);border-top:2px solid var(--border-color);"></td>`;
+          homeTbody.appendChild(tfoot);
+        }
+
+        // Bank table
+        const bankTbody = document.getElementById('audit-bank-tbody');
+        document.getElementById('audit-bank-count').innerText = bankRecords.length + ' record' + (bankRecords.length !== 1 ? 's' : '');
+        if (bankRecords.length === 0) {
+          bankTbody.innerHTML = '<tr><td colspan="5" style="padding:2rem;text-align:center;color:var(--text-muted);">No Cash Bank deposits in selected range.</td></tr>';
+        } else {
+          bankTbody.innerHTML = '';
+          bankRecords.forEach(function(rec, idx) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);text-align:center;color:var(--text-muted);font-size:0.85rem;">${idx + 1}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);font-weight:600;">${formatDateReadable(rec.date)}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);text-align:right;font-family:monospace;font-weight:700;color:#2563eb;">₹${rec.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);font-size:0.87rem;color:var(--text-muted);">${rec.note || '<em style="opacity:0.5;">—</em>'}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);text-align:center;">
+                <button onclick="showSlipModal('bank','${rec.date}',${rec.amount},'${(rec.note||'').replace(/'/g,"\\'")}')"
+                  style="background:#2563eb;color:white;border:none;padding:0.3rem 0.75rem;border-radius:0.375rem;font-size:0.8rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:0.3rem;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+                  Challan
+                </button>
+              </td>
+            `;
+            bankTbody.appendChild(tr);
+          });
+          const tfoot = document.createElement('tr');
+          tfoot.innerHTML = `<td colspan="2" style="padding:0.75rem 1rem;font-weight:700;text-transform:uppercase;font-size:0.85rem;background:var(--header-bg);border-top:2px solid var(--border-color);">Total Deposited to Bank</td><td style="padding:0.75rem 1rem;text-align:right;font-weight:800;font-family:monospace;color:#2563eb;background:var(--header-bg);border-top:2px solid var(--border-color);">₹${totalBank.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td><td colspan="2" style="background:var(--header-bg);border-top:2px solid var(--border-color);"></td>`;
+          bankTbody.appendChild(tfoot);
+        }
+
+        // Online table
+        const onlineTbody = document.getElementById('audit-online-tbody');
+        document.getElementById('audit-online-count').innerText = onlineRecords.length + ' record' + (onlineRecords.length !== 1 ? 's' : '');
+        if (onlineRecords.length === 0) {
+          onlineTbody.innerHTML = '<tr><td colspan="6" style="padding:2rem;text-align:center;color:var(--text-muted);">No Online Payment expenses found in selected range.</td></tr>';
+        } else {
+          onlineTbody.innerHTML = '';
+          onlineRecords.forEach(function(rec, idx) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);text-align:center;color:var(--text-muted);font-size:0.85rem;">${idx + 1}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);font-weight:600;">${formatDateReadable(rec.date)}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);font-size:0.875rem;">${rec.details}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);text-align:right;font-family:monospace;">₹${rec.rate.toFixed(2)}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);text-align:center;">${rec.qty}</td>
+              <td style="padding:0.6rem 1rem;border-bottom:1px solid var(--table-row-border);text-align:right;font-family:monospace;font-weight:700;color:var(--receipt-primary);">₹${rec.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            `;
+            onlineTbody.appendChild(tr);
+          });
+          const tfoot = document.createElement('tr');
+          tfoot.innerHTML = `<td colspan="5" style="padding:0.75rem 1rem;font-weight:700;text-transform:uppercase;font-size:0.85rem;background:var(--header-bg);border-top:2px solid var(--border-color);">Total Online Payments</td><td style="padding:0.75rem 1rem;text-align:right;font-weight:800;font-family:monospace;color:var(--receipt-primary);background:var(--header-bg);border-top:2px solid var(--border-color);">₹${totalOnline.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>`;
+          onlineTbody.appendChild(tfoot);
+        }
+      }
+
+      // Helper to parse denomination breakdown from Note string
+      function parseDenominationsFromNote(noteStr) {
+        if (!noteStr) return null;
+        
+        // Check if it's a breakdown note
+        if (noteStr.startsWith('[Breakdown:')) {
+          const parsedMultiple = parseMultipleTransfers(noteStr);
+          const mergedCounts = {};
+          let grandTotal = 0;
+          let hasDenom = false;
+          
+          parsedMultiple.entries.forEach(entry => {
+            const subParsed = parseDenominationsFromNote(entry.note);
+            if (subParsed) {
+              hasDenom = true;
+              subParsed.breakdown.forEach(item => {
+                const label = item.label;
+                const count = item.count;
+                const total = item.total;
+                
+                if (!mergedCounts[label]) {
+                  mergedCounts[label] = { label: label, count: 0, total: 0 };
+                }
+                mergedCounts[label].count += count;
+                mergedCounts[label].total += total;
+                grandTotal += total;
+              });
+            }
+          });
+          
+          if (!hasDenom) return null;
+          
+          const breakdownArray = Object.keys(mergedCounts).map(k => mergedCounts[k]);
+          breakdownArray.sort((a, b) => {
+            if (a.label === 'Coins') return 1;
+            if (b.label === 'Coins') return -1;
+            const aVal = parseFloat(a.label.replace('₹', ''));
+            const bVal = parseFloat(b.label.replace('₹', ''));
+            return bVal - aVal;
+          });
+          
+          return {
+            breakdown: breakdownArray,
+            total: grandTotal,
+            cleanNote: parsedMultiple.generalNote || ''
+          };
+        }
+        
+        let breakdownStr = '';
+        let cleanNote = '';
+        const bracketMatch = noteStr.match(/^\[(.*?)\](.*)$/);
+        
+        if (bracketMatch) {
+          breakdownStr = bracketMatch[1];
+          cleanNote = bracketMatch[2].trim();
+        } else {
+          // Try to match direct style: 500x600, 200x139 Note
+          const directMatch = noteStr.match(/^((?:\s*(?:\d+|coins)x\d+\s*)(?:,\s*(?:\d+|coins)x\d+\s*)*)(.*)$/i);
+          if (directMatch) {
+            breakdownStr = directMatch[1];
+            cleanNote = directMatch[2].trim();
+          } else {
+            return null;
+          }
+        }
+        
+        const items = breakdownStr.split(',').map(s => s.trim());
+        const parsed = [];
+        let grandTotal = 0;
+        
+        items.forEach(item => {
+          const parts = item.split('x').map(s => s.trim());
+          if (parts.length === 2) {
+            const isCoin = parts[0].toLowerCase() === 'coins';
+            const denomVal = isCoin ? 1 : parseFloat(parts[0]);
+            const countVal = parseInt(parts[1]);
+            if (!isNaN(denomVal) && !isNaN(countVal)) {
+              const total = denomVal * countVal;
+              grandTotal += total;
+              parsed.push({
+                label: isCoin ? 'Coins' : '₹' + denomVal,
+                count: countVal,
+                total: total
+              });
+            }
+          }
+        });
+        if (parsed.length === 0) return null;
+        return {
+          breakdown: parsed,
+          total: grandTotal,
+          cleanNote: cleanNote
+        };
+      }
+
+      // Helper to generate voucher/challan HTML representation
+      function buildSlipHtml(type, date, amount, note, slipIndex) {
+        const profile = state.companyProfile || {};
+        const companyName = profile.companyName || 'GAS AGENCY';
+        const companyAddress = profile.companyAddress || '';
+        const companyGSTIN = profile.companyGSTIN || '';
+        const companyLogo = profile.companyLogo || '';
+        const isHome = type === 'home';
+        const slipTypeLabel = isHome ? 'CASH VOUCHER — SENT TO HOME' : 'BANK DEPOSIT CHALLAN';
+        const slipColor = isHome ? '#7c3aed' : '#2563eb';
+        const amountWords = convertNumberToWords(amount);
+        const suffix = (slipIndex !== undefined && slipIndex !== null) ? ('-' + slipIndex) : '';
+        const voucherNo = 'VCH/' + date.replace(/-/g, '') + '/' + (isHome ? 'H' : 'B') + suffix;
+        const currentUserName = state.currentUser ? (state.currentUser.name || state.currentUser.username) : 'System';
+
+        let cashIndexHtml = '';
+        let displayNote = note || '';
+
+        if (note && note.trim().startsWith('[Breakdown:')) {
+          const parsedMultiple = parseMultipleTransfers(note);
+          const slips = [];
+          parsedMultiple.entries.forEach((entry, idx) => {
+            let subSlipIndex = (idx + 1);
+            if (slipIndex !== undefined && slipIndex !== null) {
+              subSlipIndex = slipIndex + '-' + (idx + 1);
+            }
+            slips.push(buildSlipHtml(type, date, entry.amount, entry.note, subSlipIndex));
+          });
+          const divider = `<div class="slip-separator" style="margin: 2rem 0; border-top: 2px dashed #cbd5e1; page-break-after: avoid; page-break-inside: avoid;"></div>`;
+          return slips.join(divider);
+        } else {
+          const parsedCash = parseDenominationsFromNote(note);
+          if (parsedCash) {
+            displayNote = parsedCash.cleanNote;
+            cashIndexHtml = `
+              <div style="margin-top:1.25rem;margin-bottom:1.25rem;page-break-inside:avoid;">
+                <div style="font-size:0.8rem;font-weight:700;color:${slipColor};text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;text-align:left;display:flex;align-items:center;gap:0.3rem;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>
+                  CASH INDEX / DENOMINATIONS
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:0.8rem;text-align:left;border:1px solid #cbd5e1;background:#fff;border-radius:0.375rem;overflow:hidden;">
+                  <thead>
+                    <tr style="background:#f8fafc;border-bottom:1px solid #cbd5e1;">
+                      <th style="padding:0.4rem 0.6rem;color:#475569;font-weight:700;width:120px;">Denomination</th>
+                      <th style="padding:0.4rem 0.6rem;color:#475569;font-weight:700;text-align:center;width:100px;">Count</th>
+                      <th style="padding:0.4rem 0.6rem;color:#475569;font-weight:700;text-align:right;">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${parsedCash.breakdown.map(item => `
+                      <tr style="border-bottom:1px solid #e2e8f0;">
+                        <td style="padding:0.4rem 0.6rem;font-weight:600;color:#1e293b;">${item.label}</td>
+                        <td style="padding:0.4rem 0.6rem;text-align:center;font-weight:600;color:#1e293b;">${item.count}</td>
+                        <td style="padding:0.4rem 0.6rem;text-align:right;font-family:monospace;font-weight:700;color:#1e293b;">₹${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                  <tfoot>
+                    <tr style="background:#f8fafc;font-weight:700;">
+                      <td colspan="2" style="padding:0.4rem 0.6rem;color:#1e293b;">TOTAL CASH COUNT</td>
+                      <td style="padding:0.4rem 0.6rem;text-align:right;font-family:monospace;color:${slipColor};">₹${parsedCash.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            `;
+          }
+        }
+
+        return `
+          <div class="range-print-slip" style="page-break-inside:avoid; background:#fff; color:#000;">
+            <div style="border-bottom:2px solid ${slipColor};padding-bottom:1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:center;gap:1rem;flex-wrap:wrap;">
+              ${companyLogo ? `<img src="${companyLogo}" style="max-height:55px;max-width:120px;object-fit:contain;margin-right:0.5rem;" alt="Logo">` : ''}
+              <div style="text-align:${companyLogo ? 'left' : 'center'};">
+                <h2 style="margin:0;font-size:1.15rem;font-weight:800;color:#0f172a;letter-spacing:-0.01em;">${companyName}</h2>
+                ${companyAddress ? `<p style="margin:0.15rem 0 0 0;font-size:0.75rem;color:#64748b;font-weight:500;line-height:1.3;">${companyAddress}</p>` : ''}
+                ${companyGSTIN ? `<p style="margin:0.15rem 0 0 0;font-size:0.72rem;color:#64748b;font-weight:600;font-family:monospace;">GSTIN: ${companyGSTIN}</p>` : ''}
+              </div>
+            </div>
+            
+            <div style="text-align:center;font-weight:800;font-size:0.9rem;color:${slipColor};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:1rem;">
+              ${slipTypeLabel}
+            </div>
+            
+            <table style="width:100%;border-collapse:collapse;font-size:0.875rem;margin-bottom:1rem;">
+              <tr><td style="padding:0.4rem 0;color:#64748b;font-weight:500;width:130px;">Voucher No.</td><td style="padding:0.4rem 0;font-weight:600;font-family:monospace;">${voucherNo}</td></tr>
+              <tr><td style="padding:0.4rem 0;color:#64748b;font-weight:500;">Date</td><td style="padding:0.4rem 0;font-weight:600;">${formatDateReadable(date)}</td></tr>
+              <tr><td style="padding:0.4rem 0;color:#64748b;font-weight:500;">Category</td><td style="padding:0.4rem 0;font-weight:600;">${isHome ? 'Cash Sent to Home' : 'Cash Deposited to Bank'}</td></tr>
+              <tr><td style="padding:0.4rem 0;color:#64748b;font-weight:500;">Amount</td><td style="padding:0.4rem 0;font-weight:700;font-size:1rem;color:${slipColor};">₹${parseFloat(amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>
+              <tr><td style="padding:0.4rem 0;color:#64748b;font-weight:500;">Amount in Words</td><td style="padding:0.4rem 0;font-weight:600;font-size:0.8rem;text-transform:capitalize;color:#1e293b;">${amountWords} Rupees Only</td></tr>
+              ${displayNote ? `<tr><td style="padding:0.4rem 0;color:#64748b;font-weight:500;">Note / Ref.</td><td style="padding:0.4rem 0;font-weight:600;color:#1e293b;">${displayNote}</td></tr>` : ''}
+              <tr><td style="padding:0.4rem 0;color:#64748b;font-weight:500;">Generated By</td><td style="padding:0.4rem 0;font-weight:600;color:#1e293b;">${currentUserName}</td></tr>
+            </table>
+            
+            ${cashIndexHtml}
+            
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;border-top:1px dashed #cbd5e1;padding-top:1rem;margin-top:0.5rem;page-break-inside:avoid;">
+              <div style="text-align:center;">
+                <div style="font-weight:700;font-size:0.85rem;color:#1e293b;margin-top:1.5rem;">${currentUserName}</div>
+                <div style="border-top:1px solid #1e293b;padding-top:0.4rem;font-size:0.8rem;color:#64748b;">Prepared By</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="border-top:1px solid #1e293b;padding-top:0.4rem;margin-top:2.5rem;font-size:0.8rem;color:#64748b;">Authorized Signatory</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // Show slip/challan modal
+      function showSlipModal(type, date, amount, note, slipIndex) {
+        const slipContent = document.getElementById('slip-content');
+        slipContent.innerHTML = buildSlipHtml(type, date, amount, note, slipIndex);
+        
+        // Also populate print container
+        document.getElementById('slip-print-container').innerHTML = slipContent.innerHTML;
+
+        document.getElementById('slip-modal').classList.add('active');
+      }
+
+      // Print slip by activating print-slip-mode
+      function printSlip() {
+        document.body.classList.add('print-slip-mode');
+        window.print();
+        setTimeout(function() {
+          document.body.classList.remove('print-slip-mode');
+        }, 1000);
+      }
+
+      // =========================================================================
+      // CASH HOME / BANK HISTORY INDEX
+      // =========================================================================
+      function openCashHistoryIndex(type) {
+        const isHome = type === 'home';
+        const panelId = isHome ? 'cash-home-index' : 'cash-bank-index';
+        const listId  = isHome ? 'cash-home-index-list' : 'cash-bank-index-list';
+        const amtKey  = isHome ? 'cashSendToHome' : 'cashDepositToBank';
+        const noteKey = isHome ? 'cashSendToHomeNote' : 'cashDepositToBankNote';
+        const amtInputId  = isHome ? 'cash-home' : 'cash-bank';
+        const noteInputId = isHome ? 'cash-home-note' : 'cash-bank-note';
+        const accentColor = isHome ? '#7c3aed' : '#2563eb';
+        const bgColor     = isHome ? '#fdf4ff' : '#eff6ff';
+        const borderColor = isHome ? '#e9d5ff' : '#bfdbfe';
+
+        const panel = document.getElementById(panelId);
+        const listEl = document.getElementById(listId);
+
+        // Toggle: close if already open
+        if (panel.style.display !== 'none') {
+          panel.style.display = 'none';
+          return;
+        }
+
+        // Close the opposite panel if open
+        const otherId = isHome ? 'cash-bank-index' : 'cash-home-index';
+        document.getElementById(otherId).style.display = 'none';
+
+        // Gather records from localStorage
+        const dates = JSON.parse(localStorage.getItem('rojnamcha_saved_dates') || '[]');
+        const entries = [];
+
+        dates.forEach(function(dStr) {
+          const rec = JSON.parse(localStorage.getItem('rojnamcha_record_' + dStr) || '{}');
+          const summary = rec.summary || {};
+          const amt = parseFloat(summary[amtKey]) || 0;
+          if (amt > 0) {
+            entries.push({
+              date: dStr,
+              amount: amt,
+              note: summary[noteKey] || ''
+            });
+          }
+        });
+
+        // Sort newest first
+        entries.sort(function(a, b) { return new Date(b.date) - new Date(a.date); });
+
+        listEl.innerHTML = '';
+
+        if (entries.length === 0) {
+          listEl.innerHTML = '<div style="padding:1.25rem;text-align:center;font-size:0.85rem;color:var(--text-muted);">No previous entries found.<br><small>Save a ledger with a cash transfer first.</small></div>';
+        } else {
+          entries.forEach(function(entry) {
+            const row = document.createElement('div');
+            row.style.cssText = 'padding:0.6rem 0.75rem;border-bottom:1px solid ' + borderColor + ';cursor:pointer;display:flex;flex-direction:column;gap:0.2rem;transition:background 0.15s;';
+            row.innerHTML =
+              '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                '<span style="font-size:0.8rem;font-weight:600;color:var(--text-muted);">' + formatDateReadable(entry.date) + '</span>' +
+                '<span style="font-size:0.95rem;font-weight:800;font-family:monospace;color:' + accentColor + ';">\u20b9' + entry.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) + '</span>' +
+              '</div>' +
+              (entry.note ? '<div style="font-size:0.78rem;color:var(--text-muted);font-style:italic;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' + entry.note + '</div>' : '');
+
+            row.addEventListener('mouseenter', function() { row.style.background = bgColor; });
+            row.addEventListener('mouseleave', function() { row.style.background = ''; });
+
+            row.addEventListener('click', function() {
+              document.getElementById(amtInputId).value = entry.amount.toFixed(2);
+              document.getElementById(noteInputId).value = entry.note;
+              calculateAll();
+              panel.style.display = 'none';
+              showToast('Filled: \u20b9' + entry.amount.toLocaleString('en-IN') + (entry.note ? ' \u2014 ' + entry.note : ''), 'success');
+            });
+
+            listEl.appendChild(row);
+          });
+
+          // Footer count
+          const footer = document.createElement('div');
+          footer.style.cssText = 'padding:0.4rem 0.75rem;background:var(--header-bg);font-size:0.75rem;color:var(--text-muted);text-align:center;border-top:1px solid ' + borderColor + ';';
+          footer.textContent = entries.length + ' saved entr' + (entries.length === 1 ? 'y' : 'ies') + ' found \u2014 click any row to fill';
+          listEl.appendChild(footer);
+        }
+
+        panel.style.display = 'block';
+
+        // Close on outside click
+        setTimeout(function() {
+          function outsideClick(e) {
+            if (!panel.contains(e.target) && e.target.id !== 'btn-home-history' && e.target.id !== 'btn-bank-history') {
+              panel.style.display = 'none';
+              document.removeEventListener('click', outsideClick);
+            }
+          }
+          document.addEventListener('click', outsideClick);
+        }, 50);
+      }
+
+      // Load quick-note chips from past saved records into the note panel
+      function loadNotePanelChips(type) {
+        const isHome = type === 'home';
+        const chipsEl = document.getElementById('cash-' + type + '-chips');
+        const noteInputId = 'cash-' + type + '-note';
+        const amtKey  = isHome ? 'cashSendToHome' : 'cashDepositToBank';
+        const noteKey = isHome ? 'cashSendToHomeNote' : 'cashDepositToBankNote';
+        const accentColor = isHome ? '#7c3aed' : '#2563eb';
+        const bgColor     = isHome ? '#fdf4ff' : '#eff6ff';
+        const borderColor = isHome ? '#c4b5fd' : '#93c5fd';
+
+        if (!chipsEl) return;
+
+        const dates = JSON.parse(localStorage.getItem('rojnamcha_saved_dates') || '[]');
+        const notesSeen = new Set();
+        const chips = [];
+
+        // Sort newest first
+        const sortedDates = [...dates].sort(function(a, b) { return new Date(b) - new Date(a); });
+
+        sortedDates.forEach(function(dStr) {
+          const rec = JSON.parse(localStorage.getItem('rojnamcha_record_' + dStr) || '{}');
+          const summary = rec.summary || {};
+          const amt = parseFloat(summary[amtKey]) || 0;
+          const note = (summary[noteKey] || '').trim();
+
+          if (amt > 0 && note && !notesSeen.has(note)) {
+            notesSeen.add(note);
+            chips.push({ note: note, amount: amt, date: dStr });
+          }
+        });
+
+        chipsEl.innerHTML = '';
+
+        if (chips.length === 0) {
+          chipsEl.innerHTML = '<span style="font-size:0.72rem;color:var(--text-muted);font-style:italic;">No past notes &mdash; type your note above</span>';
+          return;
+        }
+
+        // Render chips label
+        const label = document.createElement('span');
+        label.style.cssText = 'font-size:0.7rem;color:var(--text-muted);font-weight:700;letter-spacing:0.04em;width:100%;display:block;margin-bottom:0.2rem;';
+        label.textContent = 'QUICK FILL \u2014 PAST NOTES:';
+        chipsEl.appendChild(label);
+
+        chips.slice(0, 8).forEach(function(chip) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.style.cssText = 'background:' + bgColor + ';border:1px solid ' + borderColor + ';color:' + accentColor + ';border-radius:1rem;padding:0.2rem 0.65rem;font-size:0.75rem;font-weight:600;cursor:pointer;white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;transition:all 0.15s ease;';
+          btn.title = chip.note + ' (\u20b9' + chip.amount.toLocaleString('en-IN') + ' on ' + formatDateReadable(chip.date) + ')';
+          btn.textContent = chip.note;
+
+          btn.addEventListener('mouseenter', function() {
+            btn.style.background = accentColor;
+            btn.style.color = 'white';
+          });
+          btn.addEventListener('mouseleave', function() {
+            btn.style.background = bgColor;
+            btn.style.color = accentColor;
+          });
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            document.getElementById(noteInputId).value = chip.note;
+            // Also fill amount if it is currently 0
+            const amtEl = document.getElementById('cash-' + type);
+            if (!amtEl.value || parseFloat(amtEl.value) === 0) {
+              amtEl.value = chip.amount.toFixed(2);
+              calculateAll();
+            }
+            showToast('\u2713 Note filled: ' + chip.note, 'success');
+          });
+
+          chipsEl.appendChild(btn);
+        });
+      }
+
+      // =========================================================================
+      // CASH DRAWER RECONCILIATION
+      // =========================================================================
+      const DENOMINATIONS = [
+        { value: 500, label: '₹500' },
+        { value: 200, label: '₹200' },
+        { value: 100, label: '₹100' },
+        { value: 50, label: '₹50' },
+        { value: 20, label: '₹20' },
+        { value: 10, label: '₹10' },
+        { value: 5, label: '₹5' },
+        { value: 2, label: '₹2' },
+        { value: 1, label: '₹1' },
+        { value: 1, label: 'Coins', isCoin: true }
+      ];
+
+      function renderDrawerTable() {
+        const tbody = document.getElementById('drawer-tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        DENOMINATIONS.forEach(function(denom, index) {
+          const tr = document.createElement('tr');
+          const label = denom.isCoin ? 'Coins (₹1)' : denom.label;
+          tr.innerHTML = `
+            <td style="font-weight: 600; color: var(--text-dark);">${label}</td>
+            <td>
+              <input type="number" min="0" class="drawer-count-input" id="drawer-count-${index}" data-value="${denom.value}" value="0" oninput="calcDrawerTotal()">
+            </td>
+            <td style="text-align: right; font-weight: 700; font-family: monospace; color: var(--text-dark);" id="drawer-row-total-${index}">₹0.00</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      function calcDrawerTotal() {
+        let grandTotal = 0;
+        DENOMINATIONS.forEach(function(denom, index) {
+          const input = document.getElementById('drawer-count-' + index);
+          if (!input) return;
+          const count = parseInt(input.value) || 0;
+          const rowTotal = count * denom.value;
+          grandTotal += rowTotal;
+          const rowTotalEl = document.getElementById('drawer-row-total-' + index);
+          if (rowTotalEl) {
+            rowTotalEl.textContent = '₹' + rowTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+          }
+        });
+        const totalDisplay = document.getElementById('drawer-total-display');
+        if (totalDisplay) {
+          totalDisplay.textContent = '₹' + grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        }
+        return grandTotal;
+      }
+
+      // Helper to parse existing note and restore denomination counts in the drawer inputs
+      function populateDrawerFromNote(noteStr) {
+        if (!noteStr) return false;
+        const match = noteStr.match(/^\[(.*?)\]/);
+        if (!match) return false;
+        
+        const breakdownStr = match[1];
+        const items = breakdownStr.split(',').map(s => s.trim());
+        
+        // Reset drawer counts to 0 first
+        DENOMINATIONS.forEach(function(denom, index) {
+          const input = document.getElementById('drawer-count-' + index);
+          if (input) input.value = 0;
+        });
+        
+        let foundAny = false;
+        items.forEach(item => {
+          const parts = item.split('x').map(s => s.trim());
+          if (parts.length === 2) {
+            const isCoin = parts[0].toLowerCase() === 'coins';
+            const denomVal = isCoin ? 1 : parseFloat(parts[0]);
+            const countVal = parseInt(parts[1]);
+            
+            if (!isNaN(denomVal) && !isNaN(countVal)) {
+              // Find matching denomination index
+              const idx = DENOMINATIONS.findIndex(d => {
+                if (isCoin) return d.isCoin;
+                return d.value === denomVal && !d.isCoin;
+              });
+              
+              if (idx > -1) {
+                const input = document.getElementById('drawer-count-' + idx);
+                if (input) {
+                  input.value = countVal;
+                  foundAny = true;
+                }
+              }
+            }
+          }
+        });
+        
+        return foundAny;
+      }
+
+      function openCashDrawer(type, breakdownRowIndex) {
+        state.drawerTargetType = type;
+        state.drawerTargetRowIndex = breakdownRowIndex; // track if opened from a breakdown row
+        
+        const modal = document.getElementById('cash-drawer-modal');
+        if (!modal) return;
+
+        // Render table if it hasn't been rendered yet
+        const tbody = document.getElementById('drawer-tbody');
+        if (!tbody || tbody.children.length === 0) {
+          renderDrawerTable();
+        }
+
+        // Show the modal
+        modal.classList.add('active');
+
+        // Update titles and styling context
+        const titleEl = document.getElementById('drawer-section-title');
+        const headerEl = document.getElementById('drawer-section-header');
+        const section = document.getElementById('cash-drawer-section');
+        
+        if (type === 'home') {
+          titleEl.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.35rem; display: inline-block; vertical-align: middle;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> CASH HOME DRAWER RECONCILIATION`;
+          if (headerEl) headerEl.style.background = 'linear-gradient(135deg, #7c3aed, #6d28d9)';
+          if (section) section.style.borderColor = '#7c3aed';
+        } else {
+          titleEl.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.35rem; display: inline-block; vertical-align: middle;"><rect x="3" y="2" width="18" height="20" rx="2" ry="2"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="12" y1="18" x2="12" y2="18"/><line x1="8" y1="14" x2="16" y2="14"/></svg> CASH BANK DEPOSIT RECONCILIATION`;
+          if (headerEl) headerEl.style.background = 'linear-gradient(135deg, #2563eb, #1d4ed8)';
+          if (section) section.style.borderColor = '#2563eb';
+        }
+
+        // Load existing values if they already exist in the input
+        let currentAmt = 0;
+        let currentNote = '';
+
+        if (breakdownRowIndex !== undefined && breakdownRowIndex !== null) {
+          // Opened from a breakdown row
+          const entries = state.breakdowns[type] || [];
+          const idx = breakdownRowIndex - 1;
+          if (entries[idx]) {
+            currentAmt = entries[idx].amount || 0;
+            currentNote = entries[idx].note || '';
+          }
+        } else {
+          // Opened from main card
+          currentAmt = parseFloat(document.getElementById('cash-' + type).value) || 0;
+          currentNote = document.getElementById('cash-' + type + '-note').value.trim();
+        }
+
+        // Try to parse and populate counts from the note first
+        const populatedFromNote = populateDrawerFromNote(currentNote);
+
+        if (populatedFromNote) {
+          // If populated from note, extract clean note text to show in the note input
+          const parsed = parseDenominationsFromNote(currentNote);
+          document.getElementById('drawer-note-input').value = parsed ? parsed.cleanNote : '';
+          calcDrawerTotal();
+        } else {
+          // Fallback to normal behavior if note doesn't contain bracket denominations
+          document.getElementById('drawer-note-input').value = currentNote;
+          const drawerSum = calcDrawerTotal();
+          if (Math.abs(drawerSum - currentAmt) > 0.01) {
+            clearDrawer();
+            document.getElementById('drawer-note-input').value = currentNote;
+            calcDrawerTotal();
+          }
+        }
+      }
+
+      function closeCashDrawer() {
+        const modal = document.getElementById('cash-drawer-modal');
+        if (modal) {
+          modal.classList.remove('active');
+        }
+        state.drawerTargetType = null;
+        state.drawerTargetRowIndex = null;
+      }
+
+      function clearDrawer() {
+        DENOMINATIONS.forEach(function(denom, index) {
+          const input = document.getElementById('drawer-count-' + index);
+          if (input) input.value = 0;
+        });
+        document.getElementById('drawer-note-input').value = '';
+        calcDrawerTotal();
+      }
+
+      function fillDrawerAmount() {
+        const total = calcDrawerTotal();
+        const noteText = document.getElementById('drawer-note-input').value.trim();
+        const type = state.drawerTargetType; // 'home' or 'bank'
+        const breakdownRowIndex = state.drawerTargetRowIndex;
+        
+        if (!type) {
+          showToast('No target card selected for drawer fill', 'error');
+          return;
+        }
+
+        // Gather denominations used
+        const breakdownParts = [];
+        DENOMINATIONS.forEach(function(denom, index) {
+          const input = document.getElementById('drawer-count-' + index);
+          if (input) {
+            const count = parseInt(input.value) || 0;
+            if (count > 0) {
+              const label = denom.isCoin ? 'Coins' : denom.value.toString();
+              breakdownParts.push(label + 'x' + count);
+            }
+          }
+        });
+        const breakdownStr = breakdownParts.join(', ');
+
+        let finalNote = '';
+        if (breakdownStr) {
+          finalNote = '[' + breakdownStr + ']';
+          if (noteText) {
+            finalNote += ' ' + noteText;
+          }
+        } else {
+          finalNote = noteText;
+        }
+
+        if (breakdownRowIndex !== undefined && breakdownRowIndex !== null) {
+          // Target is a breakdown row
+          const tbody = document.getElementById('breakdown-tbody');
+          if (tbody) {
+            const row = tbody.rows[breakdownRowIndex - 1];
+            if (row) {
+              const amtInput = row.querySelector('.breakdown-amount-input');
+              const noteInput = row.querySelector('.breakdown-note-input');
+              if (amtInput) amtInput.value = total.toFixed(2);
+              if (noteInput) noteInput.value = finalNote;
+              
+              // Update state and sum
+              saveBreakdownInputs();
+              updateBreakdownTotal();
+            }
+          }
+        } else {
+          // Target is the main card
+          const amtInput = document.getElementById('cash-' + type);
+          if (amtInput) {
+            amtInput.value = total.toFixed(2);
+          }
+
+          const noteInput = document.getElementById('cash-' + type + '-note');
+          if (noteInput) {
+            noteInput.value = finalNote;
+          }
+
+          const notePanel = document.getElementById('cash-' + type + '-note-panel');
+          if (notePanel) {
+            notePanel.style.display = 'block';
+          }
+
+          calculateAll();
+        }
+
+        // Close the drawer modal
+        closeCashDrawer();
+
+        showToast(`Filled ₹${total.toLocaleString('en-IN')} to Cash ${type === 'home' ? 'Home' : 'Bank'}`, 'success');
+      }
+
+      // =========================================================================
+      // DROPDOWN OPTIONS MANAGER (Inline Canvas)
+      // =========================================================================
+      function openDropdownManager() {
+        const section = document.getElementById('dropdown-manager-section');
+        if (!section) return;
+        section.style.display = 'block';
+        loadDropdownOptions();
+        section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      function closeDropdownManager() {
+        const section = document.getElementById('dropdown-manager-section');
+        if (section) {
+          section.style.display = 'none';
+        }
+      }
+
+      // =========================================================================
+      // USER AUTHENTICATION & ADMIN WORKSPACE HANDLERS
+      // =========================================================================
+
+      function handleLoginSubmit() {
+        const username = document.getElementById('login-username').value.trim();
+        const password = document.getElementById('login-password').value;
+        
+        if (!username || !password) {
+          showToast('Please enter both username and password', 'warning');
+          return;
+        }
+        
+        showLoading(true, 'Signing in...');
+        google.script.run
+          .withSuccessHandler(function(res) {
+            showLoading(false);
+            if (res && res.success) {
+              state.currentUser = res.user;
+              localStorage.setItem('rojnamcha_session', JSON.stringify({
+                username: res.user.username,
+                passwordHash: res.user.passwordHash
+              }));
+              showToast('Logged in successfully as ' + res.user.name, 'success');
+              initApp();
+            } else {
+              showToast(res.message || 'Login failed', 'error');
+            }
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Login failed: ' + err.message, 'error');
+          })
+          .loginUser(username, password);
+      }
+
+      function handleRegisterSubmit() {
+        const username = document.getElementById('register-username').value.trim();
+        const password = document.getElementById('register-password').value;
+        const name = document.getElementById('register-name').value.trim();
+        const email = document.getElementById('register-email').value.trim();
+        
+        if (!username || !password || !name || !email) {
+          showToast('Please fill all registration fields', 'warning');
+          return;
+        }
+        
+        showLoading(true, 'Submitting registration...');
+        google.script.run
+          .withSuccessHandler(function(res) {
+            showLoading(false);
+            if (res && res.success) {
+              showToast(res.message, 'success');
+              document.getElementById('register-form').reset();
+              showAuthScreen('login');
+            } else {
+              showToast(res.message || 'Registration failed', 'error');
+            }
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Registration failed: ' + err.message, 'error');
+          })
+          .registerUser(username, password, name, email);
+      }
+
+      function handleForgotSubmit() {
+        const username = document.getElementById('forgot-username').value.trim();
+        if (!username) {
+          showToast('Please enter your username', 'warning');
+          return;
+        }
+        
+        showLoading(true, 'Requesting password reset...');
+        google.script.run
+          .withSuccessHandler(function(res) {
+            showLoading(false);
+            if (res && res.success) {
+              showToast(res.message, 'success');
+              document.getElementById('forgot-form').reset();
+              showAuthScreen('login');
+            } else {
+              showToast(res.message || 'Reset request failed', 'error');
+            }
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Reset request failed: ' + err.message, 'error');
+          })
+          .requestPasswordReset(username);
+      }
+
+      function handleLogout() {
+        localStorage.removeItem('rojnamcha_session');
+        state.currentUser = null;
+        
+        // Reset navigation to daily entry
+        const tabDaily = document.getElementById('tab-daily');
+        if (tabDaily) tabDaily.click();
+        
+        showAuthScreen('login');
+        showToast('You have been logged out.', 'info');
+      }
+
+      // Admin user panel methods
+      function loadUsersManagerList() {
+        if (!state.currentUser || state.currentUser.role !== 'Admin') return;
+        
+        showLoading(true, 'Loading user accounts...');
+        google.script.run
+          .withSuccessHandler(function(users) {
+            showLoading(false);
+            renderUsersManagerList(users);
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to load users: ' + err.message, 'error');
+          })
+          .adminGetUserList(state.currentUser.username, state.currentUser.passwordHash);
+      }
+
+      function renderUsersManagerList(users) {
+        const listEl = document.getElementById('users-manager-list');
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        
+        // Filter out empty or invalid users
+        const validUsers = users ? users.filter(u => u && u.username) : [];
+        
+        if (validUsers.length === 0) {
+          listEl.innerHTML = '<li style="padding: 1rem; text-align: center; color: var(--text-muted);">No users found</li>';
+          return;
+        }
+        
+        // Add header row
+        const header = document.createElement('li');
+        header.className = 'option-manager-header';
+        header.style.gridTemplateColumns = '1.2fr 1.5fr 1fr 1fr 1fr 1.8fr';
+        header.innerHTML = `
+          <div>Username</div>
+          <div>Name / Email</div>
+          <div style="justify-content: center;">Role</div>
+          <div style="justify-content: center;">Status</div>
+          <div style="justify-content: center;">Password</div>
+          <div style="justify-content: right;">Actions</div>
+        `;
+        listEl.appendChild(header);
+        
+        validUsers.forEach(function(user) {
+          const li = document.createElement('li');
+          li.className = 'option-manager-row';
+          li.style.gridTemplateColumns = '1.2fr 1.5fr 1fr 1fr 1fr 1.8fr';
+          
+          const roleBadge = user.role === 'Admin' ? 'badge-role-admin' : '';
+          const userStatus = user.status || 'Pending';
+          const statusClass = 'badge-status-' + userStatus.toLowerCase();
+          
+          const resetWarning = user.resetRequest ? '<span style="color:#d97706; font-size:0.75rem; font-weight:700; margin-left:0.25rem;" title="Password Reset Requested!">&#9888; Reset Required</span>' : '';
+          
+          li.innerHTML = `
+            <div style="font-weight:700; color:var(--text-dark);">${user.username}</div>
+            <div style="flex-direction:column; align-items:flex-start; line-height:1.3; font-size:0.8rem; border-right:1px solid var(--border-color);">
+              <span style="font-weight:600; color:var(--text-dark);">${user.name}</span>
+              <span style="color:var(--text-muted); font-size:0.75rem;">${user.email}</span>
+            </div>
+            <div style="justify-content:center; border-right:1px solid var(--border-color);">
+              <span class="badge-role ${roleBadge}">${user.role}</span>
+            </div>
+            <div style="justify-content:center; border-right:1px solid var(--border-color);">
+              <span class="badge-status ${statusClass}">${user.status}</span>
+              ${resetWarning}
+            </div>
+            <div style="justify-content:center; border-right:1px solid var(--border-color);">
+              <button type="button" class="btn-delete-option" style="color:var(--primary-color); border:1px solid var(--primary-color); font-size:0.75rem; padding:0.15rem 0.4rem; border-radius:0.25rem;" onclick="resetUserPassword('${user.username}')">Reset</button>
+            </div>
+            <div style="justify-content:flex-end; gap:0.25rem;">
+              <!-- Quick Approve / Reject -->
+              ${user.status === 'Pending' ? `
+                <button type="button" class="btn-new" style="background:#10b981; color:white; font-size:0.72rem; padding:0.25rem 0.5rem; border-radius:0.25rem; font-weight:700; border:none; cursor:pointer;" onclick="updateUserStatus('${user.username}', 'Approved')">Approve</button>
+                <button type="button" class="btn-new" style="background:#ef4444; color:white; font-size:0.72rem; padding:0.25rem 0.5rem; border-radius:0.25rem; font-weight:700; border:none; cursor:pointer;" onclick="updateUserStatus('${user.username}', 'Rejected')">Reject</button>
+              ` : ''}
+              
+              <!-- Toggle Role -->
+              <button type="button" class="btn-delete-option" style="color:#4b5563; font-size:0.75rem; padding:0.15rem 0.4rem;" onclick="toggleUserRole('${user.username}', '${user.role}')">Toggle Role</button>
+              
+              <!-- Toggle Status (Block/Unblock) -->
+              ${user.status === 'Approved' ? `
+                <button type="button" class="btn-delete-option" style="color:#ef4444; font-size:0.75rem; padding:0.15rem 0.4rem;" onclick="updateUserStatus('${user.username}', 'Rejected')">Block</button>
+              ` : (user.status === 'Rejected' ? `
+                <button type="button" class="btn-delete-option" style="color:#10b981; font-size:0.75rem; padding:0.15rem 0.4rem;" onclick="updateUserStatus('${user.username}', 'Approved')">Unblock</button>
+              ` : '')}
+              
+              <!-- Delete -->
+              <button type="button" class="btn-delete-option" style="color:var(--expense-primary); font-size:0.75rem; padding:0.15rem 0.4rem;" onclick="deleteUserAccount('${user.username}')">Delete</button>
+            </div>
+          `;
+          listEl.appendChild(li);
+        });
+      }
+
+      function handleAdminAddUser() {
+        const username = document.getElementById('admin-user-username').value.trim();
+        const password = document.getElementById('admin-user-password').value;
+        const name = document.getElementById('admin-user-name').value.trim();
+        const email = document.getElementById('admin-user-email').value.trim();
+        const role = document.getElementById('admin-user-role').value;
+        
+        if (!username || !password || !name || !email) {
+          showToast('Please fill all fields to add a user', 'warning');
+          return;
+        }
+        
+        const user = { username: username, password: password, name: name, email: email, role: role, status: 'Approved' };
+        
+        showLoading(true, 'Adding user account...');
+        google.script.run
+          .withSuccessHandler(function(res) {
+            showLoading(false);
+            if (res && res.success) {
+              showToast('User added successfully!', 'success');
+              document.getElementById('admin-add-user-form').reset();
+              loadUsersManagerList();
+            } else {
+              showToast(res.message || 'Failed to add user', 'error');
+            }
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to add user: ' + err.message, 'error');
+          })
+          .adminAddUser(state.currentUser.username, state.currentUser.passwordHash, user);
+      }
+
+      function updateUserStatus(targetUsername, status) {
+        if (targetUsername === state.currentUser.username) {
+          showToast('You cannot change your own status.', 'warning');
+          return;
+        }
+        
+        showLoading(true, 'Updating user status...');
+        
+        google.script.run
+          .withSuccessHandler(function(users) {
+            const user = users.find(u => u.username === targetUsername);
+            if (!user) {
+              showLoading(false);
+              showToast('User not found', 'error');
+              return;
+            }
+            
+            const updatedData = {
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              status: status
+            };
+            
+            google.script.run
+              .withSuccessHandler(function(res) {
+                showLoading(false);
+                if (res && res.success) {
+                  showToast('User status updated to ' + status, 'success');
+                  loadUsersManagerList();
+                } else {
+                  showToast(res.message || 'Update failed', 'error');
+                }
+              })
+              .withFailureHandler(function(err) {
+                showLoading(false);
+                showToast('Update failed: ' + err.message, 'error');
+              })
+              .adminUpdateUser(state.currentUser.username, state.currentUser.passwordHash, targetUsername, updatedData);
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Fetch failed: ' + err.message, 'error');
+          })
+          .adminGetUserList(state.currentUser.username, state.currentUser.passwordHash);
+      }
+
+      function toggleUserRole(targetUsername, currentRole) {
+        if (targetUsername === state.currentUser.username) {
+          showToast('You cannot change your own admin role.', 'warning');
+          return;
+        }
+        
+        const newRole = currentRole === 'Admin' ? 'User' : 'Admin';
+        showLoading(true, 'Changing user role...');
+        
+        google.script.run
+          .withSuccessHandler(function(users) {
+            const user = users.find(u => u.username === targetUsername);
+            if (!user) {
+              showLoading(false);
+              showToast('User not found', 'error');
+              return;
+            }
+            
+            const updatedData = {
+              name: user.name,
+              email: user.email,
+              role: newRole,
+              status: user.status
+            };
+            
+            google.script.run
+              .withSuccessHandler(function(res) {
+                showLoading(false);
+                if (res && res.success) {
+                  showToast('User role updated to ' + newRole, 'success');
+                  loadUsersManagerList();
+                } else {
+                  showToast(res.message || 'Update failed', 'error');
+                }
+              })
+              .withFailureHandler(function(err) {
+                showLoading(false);
+                showToast('Update failed: ' + err.message, 'error');
+              })
+              .adminUpdateUser(state.currentUser.username, state.currentUser.passwordHash, targetUsername, updatedData);
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Fetch failed: ' + err.message, 'error');
+          })
+          .adminGetUserList(state.currentUser.username, state.currentUser.passwordHash);
+      }
+
+      function resetUserPassword(targetUsername) {
+        showCustomPrompt(
+          'Enter a new secure password for this user account. The change will take effect immediately.',
+          '',
+          function(newPassword) {
+            if (newPassword === null) return;
+            if (newPassword.trim() === '') {
+              showToast('Password cannot be empty', 'warning');
+              return;
+            }
+            
+            showLoading(true, 'Resetting password...');
+            google.script.run
+              .withSuccessHandler(function(res) {
+                showLoading(false);
+                if (res && res.success) {
+                  showToast('Password reset successfully for ' + targetUsername, 'success');
+                  loadUsersManagerList();
+                } else {
+                  showToast(res.message || 'Reset failed', 'error');
+                }
+              })
+              .withFailureHandler(function(err) {
+                showLoading(false);
+                showToast('Reset failed: ' + err.message, 'error');
+              })
+              .adminResetPassword(state.currentUser.username, state.currentUser.passwordHash, targetUsername, newPassword.trim());
+          },
+          {
+            title: 'Reset Password',
+            label: 'New Password',
+            type: 'password',
+            placeholder: 'Enter new password...',
+            okText: 'Reset Password',
+            cancelText: 'Cancel'
+          }
+        );
+      }
+
+      function deleteUserAccount(targetUsername) {
+        if (targetUsername === state.currentUser.username) {
+          showToast('You cannot delete your own admin account.', 'warning');
+          return;
+        }
+        
+        showCustomConfirm(
+          'Are you sure you want to delete the user account "' + targetUsername + '"? This operation is permanent and cannot be undone.',
+          function() {
+            showLoading(true, 'Deleting user account...');
+            google.script.run
+              .withSuccessHandler(function(res) {
+                showLoading(false);
+                if (res && res.success) {
+                  showToast('User account deleted.', 'success');
+                  loadUsersManagerList();
+                } else {
+                  showToast(res.message || 'Failed to delete user', 'error');
+                }
+              })
+              .withFailureHandler(function(err) {
+                showLoading(false);
+                showToast('Failed to delete user: ' + err.message, 'error');
+              })
+              .adminDeleteUser(state.currentUser.username, state.currentUser.passwordHash, targetUsername);
+          },
+          {
+            type: 'delete',
+            title: 'Confirm Delete Account',
+            okText: 'Delete',
+            cancelText: 'Cancel'
+          }
+        );
+      }
+
+      // ==========================================
+      // MULTIPLE ENTRIES / BREAKDOWN EDITOR
+      // ==========================================
+
+      function openBreakdownModal(type) {
+        state.currentBreakdownType = type;
+        const modal = document.getElementById('breakdown-modal');
+        const modalTitle = document.getElementById('breakdown-modal-title');
+        const generalNoteInput = document.getElementById('breakdown-general-note');
+        
+        if (!modal) return;
+        
+        // Update header background and title based on type
+        const header = document.getElementById('breakdown-modal-header');
+        if (type === 'home') {
+          modalTitle.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> Send to Home Breakdown`;
+          if (header) header.style.background = 'linear-gradient(135deg, #7c3aed, #4f46e5)';
+        } else {
+          modalTitle.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="2" width="18" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12" y2="18"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/></svg> Send to Bank Breakdown`;
+          if (header) header.style.background = 'linear-gradient(135deg, #2563eb, #1d4ed8)';
+        }
+        
+        // Parse from input note to ensure we get any manual updates
+        const noteInputEl = document.getElementById('cash-' + type + '-note');
+        const noteVal = noteInputEl ? noteInputEl.value.trim() : '';
+        const parsed = parseMultipleTransfers(noteVal);
+        
+        state.breakdowns[type] = parsed.entries;
+        generalNoteInput.value = parsed.generalNote;
+        
+        // If parsed is empty but there's a value, initialize with main card values
+        if (state.breakdowns[type].length === 0) {
+          const mainAmt = parseFloat(document.getElementById('cash-' + type).value) || 0;
+          if (mainAmt > 0 || noteVal !== '') {
+            state.breakdowns[type].push({ amount: mainAmt, note: noteVal });
+          } else {
+            state.breakdowns[type].push({ amount: 0, note: '' });
+          }
+        }
+        
+        renderBreakdownRows();
+        modal.classList.add('active');
+      }
+
+      function closeBreakdownModal() {
+        const modal = document.getElementById('breakdown-modal');
+        if (modal) modal.classList.remove('active');
+      }
+
+      function renderBreakdownRows() {
+        const tbody = document.getElementById('breakdown-tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        
+        const type = state.currentBreakdownType;
+        const entries = state.breakdowns[type] || [];
+        const accentColor = type === 'home' ? '#7c3aed' : '#2563eb';
+        const hoverBg = type === 'home' ? '#fdf4ff' : '#eff6ff';
+        
+        entries.forEach((entry, index) => {
+          const tr = document.createElement('tr');
+          const rowIndex = index + 1;
+          
+          tr.innerHTML = `
+            <td style="padding: 0.5rem 0.25rem; font-weight: 600; color: var(--text-muted); text-align: center; width: 40px;">${rowIndex}</td>
+            <td style="padding: 0.5rem 0.25rem;">
+              <input type="number" class="table-input breakdown-amount-input" value="${entry.amount > 0 ? entry.amount : ''}" placeholder="0.00" style="height: 32px;">
+            </td>
+            <td style="padding: 0.5rem 0.25rem; display: flex; align-items: center; gap: 0.25rem;">
+              <input type="text" class="table-input breakdown-note-input" value="${entry.note || ''}" placeholder="e.g. Person Name / Branch" style="height: 32px; flex: 1;">
+              <button type="button" class="btn-calc-row" title="Calculate Denominations" style="height: 32px; width: 32px; padding: 0; background: var(--header-bg); border: 1px solid var(--border-color); border-radius: 0.375rem; color: var(--text-dark); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s ease;" onmouseenter="this.style.background='var(--border-color)';" onmouseleave="this.style.background='var(--header-bg)';">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+              </button>
+            </td>
+            <td style="padding: 0.5rem 0.25rem; text-align: center; width: 45px;">
+              <button type="button" class="btn-print-row" title="Print Slip" style="padding: 4px; background: transparent; border: none; color: ${accentColor}; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; border-radius: 0.25rem; transition: all 0.15s ease;" onmouseenter="this.style.backgroundColor='${hoverBg}'; this.style.transform='scale(1.1)';" onmouseleave="this.style.backgroundColor='transparent'; this.style.transform='scale(1)';">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+              </button>
+            </td>
+            <td style="padding: 0.5rem 0.25rem; text-align: center; width: 45px;">
+              <button type="button" class="btn-delete-row" title="Delete Row" style="padding: 4px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+
+          // Bind event listeners programmatically to the elements in this row
+          const amtInput = tr.querySelector('.breakdown-amount-input');
+          const noteInput = tr.querySelector('.breakdown-note-input');
+          const calcBtn = tr.querySelector('.btn-calc-row');
+          const printBtn = tr.querySelector('.btn-print-row');
+          const deleteBtn = tr.querySelector('.btn-delete-row');
+
+          // Amount input event to update total
+          amtInput.addEventListener('input', function() {
+            updateBreakdownTotal();
+          });
+
+          // Open drawer handler: save current inputs to state first
+          const openDrawerHandler = function() {
+            saveBreakdownInputs();
+            openCashDrawer(type, rowIndex);
+          };
+
+          amtInput.addEventListener('click', openDrawerHandler);
+          calcBtn.addEventListener('click', openDrawerHandler);
+
+          // Print row click handler
+          printBtn.addEventListener('click', function() {
+            printBreakdownRow(printBtn);
+          });
+
+          // Delete row click handler
+          deleteBtn.addEventListener('click', function() {
+            deleteBreakdownRow(deleteBtn);
+          });
+        });
+        
+        updateBreakdownTotal();
+      }
+
+      function printBreakdownRow(btn) {
+        const type = state.currentBreakdownType;
+        const row = btn.closest('tr');
+        const amtInput = row.querySelector('.breakdown-amount-input');
+        const noteInput = row.querySelector('.breakdown-note-input');
+        
+        const amtVal = parseFloat(amtInput.value) || 0;
+        const noteVal = noteInput.value.trim();
+        
+        if (amtVal <= 0) {
+          showToast('Please enter an amount to print a slip', 'error');
+          return;
+        }
+        
+        const dateVal = state.selectedDate || new Date().toISOString().split('T')[0];
+        const rowIndex = Array.from(row.parentNode.children).indexOf(row) + 1;
+        showSlipModal(type, dateVal, amtVal, noteVal, rowIndex);
+      }
+
+      function addBreakdownRow() {
+        const type = state.currentBreakdownType;
+        if (!state.breakdowns[type]) {
+          state.breakdowns[type] = [];
+        }
+        
+        // Save currently entered values first
+        saveBreakdownInputs();
+        
+        state.breakdowns[type].push({ amount: 0, note: '' });
+        renderBreakdownRows();
+      }
+
+      function deleteBreakdownRow(btn) {
+        const type = state.currentBreakdownType;
+        const row = btn.closest('tr');
+        const rowIndex = Array.from(row.parentNode.children).indexOf(row);
+        
+        saveBreakdownInputs();
+        
+        state.breakdowns[type].splice(rowIndex, 1);
+        if (state.breakdowns[type].length === 0) {
+          state.breakdowns[type].push({ amount: 0, note: '' });
+        }
+        renderBreakdownRows();
+      }
+
+      function saveBreakdownInputs() {
+        const type = state.currentBreakdownType;
+        const tbody = document.getElementById('breakdown-tbody');
+        if (!tbody) return;
+        
+        const rows = tbody.rows;
+        const entries = [];
+        
+        for (let i = 0; i < rows.length; i++) {
+          const amtVal = parseFloat(rows[i].querySelector('.breakdown-amount-input').value) || 0;
+          const noteVal = rows[i].querySelector('.breakdown-note-input').value.trim();
+          entries.push({ amount: amtVal, note: noteVal });
+        }
+        
+        state.breakdowns[type] = entries;
+      }
+
+      function updateBreakdownTotal() {
+        const tbody = document.getElementById('breakdown-tbody');
+        if (!tbody) return;
+        
+        let total = 0;
+        const rows = tbody.rows;
+        for (let i = 0; i < rows.length; i++) {
+          const amtVal = parseFloat(rows[i].querySelector('.breakdown-amount-input').value) || 0;
+          total += amtVal;
+        }
+        
+        document.getElementById('breakdown-total-display').innerText = '₹' + total.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+      }
+
+      function applyBreakdown() {
+        const type = state.currentBreakdownType;
+        saveBreakdownInputs();
+        
+        const entries = state.breakdowns[type];
+        const generalNote = document.getElementById('breakdown-general-note').value.trim();
+        
+        // Sum total amount
+        let totalAmount = 0;
+        entries.forEach(e => {
+          totalAmount += e.amount;
+        });
+        
+        // Update main page input fields
+        document.getElementById('cash-' + type).value = totalAmount.toFixed(2);
+        
+        const formattedNote = formatMultipleTransfers(entries, generalNote);
+        const noteEl = document.getElementById('cash-' + type + '-note');
+        if (noteEl) noteEl.value = formattedNote;
+        
+        calculateAll();
+        closeBreakdownModal();
+        showToast('Breakdown applied successfully!', 'success');
+      }
+
+      function parseMultipleTransfers(noteStr) {
+        noteStr = noteStr || '';
+        const match = noteStr.match(/^\[Breakdown:\s*(.*?)\]\s*(.*)$/s);
+        if (match) {
+          const breakdownStr = match[1];
+          const generalNote = match[2].trim();
+          const entries = [];
+          const items = breakdownStr.split(';').map(s => s.trim()).filter(Boolean);
+          items.forEach(item => {
+            const dashIdx = item.indexOf(' - ');
+            if (dashIdx !== -1) {
+              const amount = parseFloat(item.substring(0, dashIdx).trim()) || 0;
+              const note = item.substring(dashIdx + 3).trim();
+              entries.push({ amount: amount, note: note });
+            } else {
+              const amount = parseFloat(item) || 0;
+              const note = item.replace(/^[0-9.]+\s*/, '').trim();
+              entries.push({ amount: amount, note: note });
+            }
+          });
+          return { entries: entries, generalNote: generalNote };
+        }
+        return { entries: [], generalNote: noteStr.trim() };
+      }
+
+      function formatMultipleTransfers(entries, generalNote) {
+        if (!entries || entries.length === 0) {
+          return (generalNote || '').trim();
+        }
+        const breakdownParts = entries
+          .filter(e => parseFloat(e.amount) > 0)
+          .map(e => `${parseFloat(e.amount).toFixed(2)} - ${(e.note || '').replace(/[;\[\]]/g, ' ').trim()}`);
+        if (breakdownParts.length === 0) {
+          return (generalNote || '').trim();
+        }
+        const breakdownStr = `[Breakdown: ${breakdownParts.join('; ')}]`;
+        return generalNote && generalNote.trim() ? `${breakdownStr} ${generalNote.trim()}` : breakdownStr;
+      }
+
+      // Print all slips/challans inside the generated audit date range sequentially
+      function printAllRangeSlips(type) {
+        const records = type === 'home' ? state.auditHomeRecords : state.auditBankRecords;
+        if (!records || records.length === 0) {
+          showToast('No records found to print.', 'error');
+          return;
+        }
+        
+        let stackedHtml = '';
+        records.forEach((rec, idx) => {
+          stackedHtml += buildSlipHtml(type, rec.date, rec.amount, rec.note, idx + 1);
+        });
+        
+        const printContainer = document.getElementById('slip-print-container');
+        printContainer.innerHTML = stackedHtml;
+        
+        document.body.classList.add('print-slip-mode');
+        window.print();
+        setTimeout(function() {
+          document.body.classList.remove('print-slip-mode');
+          printContainer.innerHTML = '';
+        }, 1000);
+      }
+
+      // Cleans and formats breakdown notes for the printed Daily Ledger summary
+      function formatNoteForSummary(noteStr) {
+        if (!noteStr) return '';
+        noteStr = noteStr.trim();
+        if (noteStr.startsWith('[Breakdown:')) {
+          const match = noteStr.match(/^\[Breakdown:\s*(.*?)\]\s*(.*)$/s);
+          if (match) {
+            const breakdownStr = match[1];
+            const generalNote = match[2].trim();
+            const parts = [];
+            const items = breakdownStr.split(';').map(s => s.trim()).filter(Boolean);
+            items.forEach(item => {
+              let amount = 0;
+              let note = '';
+              const dashIdx = item.indexOf(' - ');
+              if (dashIdx !== -1) {
+                amount = parseFloat(item.substring(0, dashIdx).trim()) || 0;
+                note = item.substring(dashIdx + 3).trim();
+              } else {
+                amount = parseFloat(item) || 0;
+                note = item.replace(/^[0-9.]+\s*/, '').trim();
+              }
+              
+              let cleanText = note;
+              const directMatch = note.match(/^((?:\s*(?:\d+|coins)x\d+\s*)(?:,\s*(?:\d+|coins)x\d+\s*)*)(.*)$/i);
+              if (directMatch) {
+                cleanText = directMatch[2].trim();
+              }
+              
+              const amtStr = 'Rs.' + amount.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+              if (cleanText) {
+                parts.push(amtStr + ' (' + cleanText + ')');
+              } else {
+                parts.push(amtStr);
+              }
+            });
+            let result = parts.join(' + ');
+            if (generalNote) {
+              result += ' — ' + generalNote;
+            }
+            return result;
+          }
+        }
+        
+        const directMatch = noteStr.match(/^((?:\s*(?:\d+|coins)x\d+\s*)(?:,\s*(?:\d+|coins)x\d+\s*)*)(.*)$/i);
+        if (directMatch) {
+          return directMatch[2].trim();
+        }
+        const bracketMatch = noteStr.match(/^\[(.*?)\](.*)$/);
+        if (bracketMatch) {
+          return bracketMatch[2].trim();
+        }
+        
+        return noteStr;
+      }
+
+      // Compile detailed ledger print block HTML for a daily record
+      function buildDailyLedgerPrintHtml(dayData) {
+        const summary = dayData.summary;
+        const details = dayData.details || [];
+        const profile = state.companyProfile || {};
+        const companyName = profile.companyName || '';
+        const companyAddress = profile.companyAddress || '';
+        const companyGSTIN = profile.companyGSTIN || '';
+        const companyLogo = profile.companyLogo || '';
+        const currentUserName = state.currentUser ? (state.currentUser.name || state.currentUser.username) : 'System';
+
+        // Normalize field names
+        const receiptTotal = parseFloat(summary.receiptTotal || summary.receipts || 0);
+        const expenseTotal = parseFloat(summary.expenseTotal || summary.expenses || 0);
+        const openingCash  = parseFloat(summary.openingCash || 0);
+        const netBalance   = parseFloat(summary.netBalance != null ? summary.netBalance
+                              : (openingCash + receiptTotal - expenseTotal));
+        const cashSendToHome     = parseFloat(summary.cashSendToHome || 0);
+        const cashDepositToBank  = parseFloat(summary.cashDepositToBank || 0);
+        const closingCashInHand  = parseFloat(summary.closingCashInHand || 0);
+
+        const receipts = details.filter(d => d.section === 'Receipt');
+        const expenses = details.filter(d => d.section === 'Expense');
+        
+        receipts.sort((a, b) => a.sl - b.sl);
+        expenses.sort((a, b) => a.sl - b.sl);
+
+        let logoHtml = '';
+        if (companyLogo) {
+          logoHtml = `<img src="${companyLogo}" style="max-height: 50px; max-width: 120px; margin-right: 10px; display: inline-block; vertical-align: middle;" />`;
+        }
+
+        let addressHtml = '';
+        if (companyAddress) {
+          addressHtml = `<div class="company-sub">${companyAddress}</div>`;
+        }
+
+        let gstinHtml = '';
+        if (companyGSTIN) {
+          gstinHtml = `<div class="company-sub" style="font-weight: bold;">GSTIN: ${companyGSTIN}</div>`;
+        }
+
+        let receiptsRowsHtml = '';
+        if (receipts.length === 0) {
+          receiptsRowsHtml = `<tr><td colspan="5" style="text-align: center; color: #9ca3af; padding: 10px;">No receipt entries for this day.</td></tr>`;
+        } else {
+          receipts.forEach(item => {
+            receiptsRowsHtml += `
+              <tr>
+                <td align="center" class="col-sl">${item.sl}</td>
+                <td>${item.details || ''}</td>
+                <td align="right" class="col-rate">${item.rate > 0 ? 'Rs.' + item.rate.toFixed(2) : ''}</td>
+                <td align="center" class="col-qty">${item.qty > 0 ? item.qty : ''}</td>
+                <td align="right" class="col-amount">Rs.${item.amount.toFixed(2)}</td>
+              </tr>
+            `;
+          });
+        }
+
+        let expensesRowsHtml = '';
+        expenses.forEach((item, idx) => {
+          expensesRowsHtml += `
+            <tr>
+              <td align="center" class="col-sl">${idx + 1}</td>
+              <td>${item.details || ''}</td>
+              <td align="right" class="col-rate">${item.rate > 0 ? 'Rs.' + item.rate.toFixed(2) : ''}</td>
+              <td align="center" class="col-qty">${item.qty > 0 ? item.qty : ''}</td>
+              <td align="right" class="col-amount">Rs.${item.amount.toFixed(2)}</td>
+            </tr>
+          `;
+        });
+
+        let expensesSectionHtml = '';
+        if (expenses.length > 0) {
+          expensesSectionHtml = `
+            <div class="section-title expenses-title">EXPENSES (OUTFLOW)</div>
+            <table class="ledger-table expenses-table" cellpadding="0" cellspacing="0">
+              <thead>
+                <tr>
+                  <th class="col-sl" align="center">SL</th>
+                  <th>Details / Description</th>
+                  <th style="width: 90px; text-align: right;">Rate (Rs.)</th>
+                  <th style="width: 50px; text-align: center;">Qty</th>
+                  <th style="width: 110px; text-align: right;">Amount (Rs.)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${expensesRowsHtml}
+              </tbody>
+            </table>
+            <table class="total-bar expenses-total-bar" cellpadding="0" cellspacing="0">
+              <tr>
+                <td align="left">TOTAL EXPENSES (OUTFLOW)</td>
+                <td align="right" style="width: 150px; font-weight: bold;">Rs.${expenseTotal.toFixed(2)}</td>
+              </tr>
+            </table>
+          `;
+        }
+
+        return `
+          <div class="daily-ledger-page page">
+            <!-- Company Header with Branding -->
+            <table class="header-table" cellpadding="0" cellspacing="0">
+              <tr>
+                <td valign="middle">
+                  ${logoHtml}
+                  <div style="display: inline-block; vertical-align: middle; text-align: left;">
+                    <div class="company-title">${companyName}</div>
+                    ${addressHtml}
+                    ${gstinHtml}
+                  </div>
+                </td>
+                <td align="right" valign="middle" class="report-title">
+                  <div style="font-weight: bold; font-size: 12px; color: #1f2937;">DAILY LEDGER (ROJNAMCHA)</div>
+                  <div class="report-date">${formatDateReadable(summary.date)}</div>
+                  <div style="font-size: 9px; color: #9ca3af; margin-top: 2px;">Generated by Rojnamcha System</div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Receipts Section -->
+            <div class="section-title receipts-title">RECEIPTS (INFLOW)</div>
+            <table class="ledger-table receipts-table" cellpadding="0" cellspacing="0">
+              <thead>
+                <tr>
+                  <th class="col-sl" align="center">SL</th>
+                  <th>Details / Description</th>
+                  <th style="width: 90px; text-align: right;">Rate (Rs.)</th>
+                  <th style="width: 50px; text-align: center;">Qty</th>
+                  <th style="width: 110px; text-align: right;">Amount (Rs.)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${receiptsRowsHtml}
+              </tbody>
+            </table>
+            <table class="total-bar receipts-total-bar" cellpadding="0" cellspacing="0">
+              <tr>
+                <td align="left">TOTAL RECEIPTS (INFLOW)</td>
+                <td align="right" style="width: 150px; font-weight: bold;">Rs.${receiptTotal.toFixed(2)}</td>
+              </tr>
+            </table>
+
+            ${expensesSectionHtml}
+
+            <!-- Reconciliation Summary -->
+            <table class="reconciliation-table" cellpadding="0" cellspacing="0">
+              <tr>
+                <td class="reconciliation-label">OPENING CASH IN HAND</td>
+                <td class="reconciliation-val">Rs.${openingCash.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td class="reconciliation-label">NET LEDGER BALANCE</td>
+                <td class="reconciliation-val">Rs.${netBalance.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td class="reconciliation-label">
+                  CASH SENT TO HOME${cashSendToHome > 0 && summary.cashSendToHomeNote ? ' — ' + formatNoteForSummary(summary.cashSendToHomeNote) : ''}
+                </td>
+                <td class="reconciliation-val">Rs.${cashSendToHome.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td class="reconciliation-label">
+                  CASH DEPOSIT TO BANK${cashDepositToBank > 0 && summary.cashDepositToBankNote ? ' — ' + formatNoteForSummary(summary.cashDepositToBankNote) : ''}
+                </td>
+                <td class="reconciliation-val">Rs.${cashDepositToBank.toFixed(2)}</td>
+              </tr>
+              <tr style="background-color: #f0fdf4;">
+                <td class="reconciliation-label" style="color: #065f46; font-size: 12px;">CLOSING CASH IN HAND</td>
+                <td class="reconciliation-val" style="text-decoration: underline; color: #065f46; font-size: 12px;">Rs.${closingCashInHand.toFixed(2)}</td>
+              </tr>
+            </table>
+
+            <!-- Signature Section -->
+            <table class="signature-table" cellpadding="0" cellspacing="0">
+              <tr>
+                <td align="left" style="width: 33%;">
+                  Prepared By
+                  <div class="signature-line"></div>
+                  <div style="font-size: 10px; font-weight: bold; margin-top: 5px; color: #374151;">${currentUserName}</div>
+                </td>
+                <td align="center" style="width: 33%;">
+                  Checked By
+                  <div class="signature-line" style="margin: 35px auto 0 auto;"></div>
+                </td>
+                <td align="right" style="width: 33%;">
+                  Authorized Signature
+                  <div class="signature-line" style="margin: 35px 0 0 auto;"></div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Branding Footer -->
+            <div class="branding-footer">
+              ${companyName}${companyAddress ? ' | ' + companyAddress : ''}${companyGSTIN ? ' | GSTIN: ' + companyGSTIN : ''}
+              <br/>Rojnamcha Daily Ledger Management System
+            </div>
+          </div>
+        `;
+      }
+
+      // Fetch and print detailed ledger for selected date range
+      function printDetailedRangeLedger() {
+        const startDate = document.getElementById('report-start-date').value;
+        const endDate = document.getElementById('report-end-date').value;
+        
+        if (!startDate || !endDate) {
+          showToast('Please select both Start and End dates', 'error');
+          return;
+        }
+        if (new Date(startDate) > new Date(endDate)) {
+          showToast('Start Date cannot be after End Date', 'error');
+          return;
+        }
+        
+        showLoading(true, 'Generating print layout...');
+        
+        google.script.run
+          .withSuccessHandler(function(ledgerList) {
+            showLoading(false);
+            if (ledgerList && ledgerList.length > 0) {
+              let stackedHtml = '';
+              ledgerList.forEach(day => {
+                stackedHtml += buildDailyLedgerPrintHtml(day);
+              });
+              
+              const printContainer = document.getElementById('detailed-ledger-print-container');
+              printContainer.innerHTML = stackedHtml;
+              
+              document.body.classList.add('print-detailed-ledger-mode');
+              window.print();
+              setTimeout(function() {
+                document.body.classList.remove('print-detailed-ledger-mode');
+                printContainer.innerHTML = '';
+              }, 1000);
+            } else {
+              showToast('No ledger entries found for selected date range.', 'error');
+            }
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Print error: ' + err.message, 'error');
+          })
+          .getDetailedRangeLedger(startDate, endDate);
+      }
+
+      function printActiveDailyLedger() {
+        if (!state.selectedDate) {
+          showToast('Please select a date first', 'error');
+          return;
+        }
+        
+        const receiptsTotal = parseFloat(document.getElementById('receipts-total-val').innerText.replace(/[^\d.]/g, '')) || 0;
+        const expensesTotal = parseFloat(document.getElementById('expenses-total-val').innerText.replace(/[^\d.]/g, '')) || 0;
+        const netBalance = parseFloat(document.getElementById('net-balance-val').innerText.replace(/[^\d.-]/g, '')) || 0;
+        const cashHome = parseFloat(document.getElementById('cash-home').value) || 0;
+        const cashBank = parseFloat(document.getElementById('cash-bank').value) || 0;
+        const closingCash = parseFloat(document.getElementById('closing-cash-val').innerText.replace(/[^\d.-]/g, '')) || 0;
+        
+        const cashHomeNote = document.getElementById('cash-home-note') ? document.getElementById('cash-home-note').value.trim() : '';
+        const cashBankNote = document.getElementById('cash-bank-note') ? document.getElementById('cash-bank-note').value.trim() : '';
+        
+        const r1Amt = parseFloat(document.getElementById('r-amount-1').value) || 0;
+        
+        const summary = {
+          date: state.selectedDate,
+          receiptTotal: receiptsTotal,
+          expenseTotal: expensesTotal,
+          netBalance: netBalance,
+          openingCash: r1Amt,
+          cashSendToHome: cashHome,
+          cashDepositToBank: cashBank,
+          closingCashInHand: closingCash,
+          cashSendToHomeNote: cashHomeNote,
+          cashDepositToBankNote: cashBankNote
+        };
+        
+        const details = [];
+        const r1Details = document.getElementById('r-details-1').value;
+        if (r1Details.trim()) {
+          details.push({ section: 'Receipt', sl: 1, details: r1Details, rate: 0, qty: 1, amount: r1Amt });
+        }
+        
+        const rRows = document.getElementById('receipts-tbody').rows;
+        for (let i = 1; i < rRows.length; i++) {
+          const sl = i + 1;
+          const dVal = document.getElementById('r-details-' + sl).value;
+          const rVal = parseFloat(document.getElementById('r-rate-' + sl).value) || 0;
+          const qVal = parseFloat(document.getElementById('r-qty-' + sl).value) || 0;
+          const aVal = rVal * qVal;
+          if (dVal.trim()) {
+            details.push({ section: 'Receipt', sl: sl, details: dVal, rate: rVal, qty: qVal, amount: aVal });
+          }
+        }
+        
+        const eRows = document.getElementById('expenses-tbody').rows;
+        for (let j = 0; j < eRows.length; j++) {
+          const sl = j + 1;
+          const dVal = document.getElementById('e-details-' + sl).value;
+          const rVal = parseFloat(document.getElementById('e-rate-' + sl).value) || 0;
+          const qVal = parseFloat(document.getElementById('e-qty-' + sl).value) || 0;
+          const aVal = rVal * qVal;
+          if (dVal.trim()) {
+            details.push({ section: 'Expense', sl: sl, details: dVal, rate: rVal, qty: qVal, amount: aVal });
+          }
+        }
+
+        const dayData = {
+          summary: summary,
+          details: details
+        };
+
+        const printContainer = document.getElementById('detailed-ledger-print-container');
+        printContainer.innerHTML = buildDailyLedgerPrintHtml(dayData);
+        
+        document.body.classList.add('print-detailed-ledger-mode');
+        window.print();
+        setTimeout(function() {
+          document.body.classList.remove('print-detailed-ledger-mode');
+          printContainer.innerHTML = '';
+        }, 1000);
+      }
+
+      // Email Modal controls
+      let currentEmailScope = 'daily';
+
+      function openEmailModal(scope) {
+        currentEmailScope = scope;
+        const profile = state.companyProfile || {};
+        
+        let dateLabel = '';
+        let startDateStr = '';
+        let endDateStr = '';
+        
+        if (scope === 'daily') {
+          startDateStr = state.selectedDate || new Date().toISOString().split('T')[0];
+          endDateStr = startDateStr;
+          dateLabel = formatDateReadable(startDateStr);
+        } else {
+          startDateStr = document.getElementById('report-start-date').value;
+          endDateStr = document.getElementById('report-end-date').value;
+          if (!startDateStr || !endDateStr) {
+            showToast('Please select report date range first', 'error');
+            return;
+          }
+          dateLabel = formatDateReadable(startDateStr) + ' to ' + formatDateReadable(endDateStr);
+        }
+        
+        document.getElementById('email-recipients').value = profile.mailDefaultRecipient || '';
+        
+        let subject = profile.mailDefaultSubject || 'Rojnamcha Ledger - {date}';
+        subject = subject.replace(/{date}/g, dateLabel);
+        document.getElementById('email-subject').value = subject;
+        
+        let body = profile.mailDefaultBody || 'Dear Team,\n\nPlease find attached the Rojnamcha ledger report for {date}.\n\nRegards,\n[Company]';
+        body = body.replace(/{date}/g, dateLabel);
+        body = body.replace(/\[Company\]/g, profile.companyName || '');
+        document.getElementById('email-body').value = body;
+        
+        document.getElementById('email-ledger-modal').classList.add('active');
+      }
+
+      function closeEmailModal() {
+        document.getElementById('email-ledger-modal').classList.remove('active');
+      }
+
+      function sendEmailSubmit() {
+        const recipients = document.getElementById('email-recipients').value.trim();
+        const subject = document.getElementById('email-subject').value.trim();
+        const body = document.getElementById('email-body').value.trim();
+        
+        if (!recipients) {
+          showToast('Please enter at least one recipient email address.', 'error');
+          return;
+        }
+        if (!subject) {
+          showToast('Please enter an email subject.', 'error');
+          return;
+        }
+        
+        let startDateStr = '';
+        let endDateStr = '';
+        
+        if (currentEmailScope === 'daily') {
+          startDateStr = state.selectedDate || new Date().toISOString().split('T')[0];
+          endDateStr = startDateStr;
+        } else {
+          startDateStr = document.getElementById('report-start-date').value;
+          endDateStr = document.getElementById('report-end-date').value;
+        }
+        
+        showLoading(true, 'Generating PDF and sending email...');
+        closeEmailModal();
+        
+        const preparedBy = state.currentUser ? (state.currentUser.name || state.currentUser.username) : 'System';
+        google.script.run
+          .withSuccessHandler(function(response) {
+            showLoading(false);
+            if (response && response.success) {
+              showToast(response.message, 'success');
+            } else {
+              showToast(response ? response.message : 'Failed to send email', 'error');
+            }
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Email error: ' + err.message, 'error');
+          })
+          .sendLedgerEmail(recipients, subject, body, startDateStr, endDateStr, preparedBy);
+      }
+
+      window.handleExportBackup = function() {
+        showLoading(true, 'Generating JSON backup...');
+        google.script.run
+          .withSuccessHandler(function(jsonString) {
+            showLoading(false);
+            try {
+              var blob = new Blob([jsonString], { type: 'application/json' });
+              var url = URL.createObjectURL(blob);
+              var a = document.createElement('a');
+              var dateStr = new Date().toISOString().split('T')[0];
+              a.href = url;
+              a.download = 'rojnamcha_backup_' + dateStr + '.json';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              showToast('Backup exported successfully!', 'success');
+            } catch (err) {
+              showToast('Failed to download backup file: ' + err.message, 'error');
+            }
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Export failed: ' + err.message, 'error');
+          })
+          .exportAllDataJSON();
+      };
+
+      window.handleImportBackup = function(event) {
+        var file = event.target.files[0];
+        if (!file) return;
+        
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          var content = e.target.result;
+          
+          try {
+            var parsed = JSON.parse(content);
+            if (!parsed || (!parsed.master && !parsed.data) || (!parsed.rojnamcha && !parsed.data)) {
+              showToast('Invalid backup file structure.', 'error');
+              event.target.value = '';
+              return;
+            }
+          } catch(err) {
+            showToast('File is not a valid JSON document.', 'error');
+            event.target.value = '';
+            return;
+          }
+          
+          var confirmRestore = confirm("WARNING:\n\nKya aap sach me ye backup restore karna chahte hain?\n\nIsse aapka Google Sheet ka current data PURA DELETE ho jayega aur backup file ka data import ho jayega.\n\nRestoration confirm karne ke liye dialog box me 'RESTORE' likhein (बिना quotes के):");
+          if (confirmRestore && confirmRestore.trim().toUpperCase() === 'RESTORE') {
+            showLoading(true, 'Restoring database from backup...');
+            google.script.run
+              .withSuccessHandler(function(res) {
+                showLoading(false);
+                event.target.value = '';
+                if (res && res.success) {
+                  alert('Database restored successfully! The page will now reload.');
+                  window.location.reload();
+                } else {
+                  showToast('Restore failed: ' + (res.error || 'Unknown error'), 'error');
+                }
+              })
+              .withFailureHandler(function(err) {
+                showLoading(false);
+                event.target.value = '';
+                showToast('Import failed: ' + err.message, 'error');
+              })
+              .importAllDataJSON(content);
+          } else {
+            event.target.value = '';
+            showToast('Restore cancelled.', 'info');
+          }
+        };
+        reader.readAsText(file);
+      };
+    </script>

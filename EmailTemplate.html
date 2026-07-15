@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #333333;
+      font-size: 10px;
+      line-height: 1.3;
+    }
+    .page {
+      page-break-after: always;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .page:last-child {
+      page-break-after: avoid;
+    }
+    .header-table {
+      width: 100%;
+      border-bottom: 2px solid #4f46e5;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+    }
+    .company-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #4f46e5;
+      margin: 0;
+    }
+    .company-sub {
+      font-size: 10px;
+      color: #555555;
+      margin: 2px 0 0 0;
+    }
+    .report-title {
+      text-align: right;
+      font-size: 10px;
+      color: #555555;
+    }
+    .report-date {
+      font-size: 13px;
+      font-weight: bold;
+      color: #000000;
+    }
+    .section-title {
+      padding: 4px 6px;
+      font-weight: bold;
+      font-size: 10px;
+      margin-top: 8px;
+      margin-bottom: 5px;
+    }
+    .receipts-title {
+      background-color: #ecfdf5 !important;
+      color: #065f46 !important;
+      border: 1px solid #a7f3d0 !important;
+      border-bottom: 2px solid #10b981 !important;
+    }
+    .expenses-title {
+      background-color: #fef2f2 !important;
+      color: #991b1b !important;
+      border: 1px solid #fecaca !important;
+      border-bottom: 2px solid #ef4444 !important;
+    }
+    .ledger-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 5px;
+    }
+    .ledger-table th {
+      padding: 4px 6px;
+      font-weight: bold;
+      text-align: left;
+      font-size: 9.5px;
+    }
+    .ledger-table td {
+      padding: 4px 6px;
+      font-size: 9.5px;
+    }
+    .receipts-table th {
+      background-color: #f0fdf4 !important;
+      color: #065f46 !important;
+      border: 1px solid #a7f3d0 !important;
+    }
+    .receipts-table td {
+      border: 1px solid #a7f3d0 !important;
+      color: #333333;
+    }
+    .expenses-table th {
+      background-color: #fff5f5 !important;
+      color: #991b1b !important;
+      border: 1px solid #fecaca !important;
+    }
+    .expenses-table td {
+      border: 1px solid #fecaca !important;
+      color: #333333;
+    }
+    .col-sl { width: 40px; text-align: center; }
+    .col-rate { width: 90px; text-align: right; }
+    .col-qty { width: 50px; text-align: center; }
+    .col-amount { width: 110px; text-align: right; font-weight: bold; }
+    .total-bar {
+      padding: 4px 6px;
+      font-weight: bold;
+      font-size: 10px;
+      text-align: right;
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .receipts-total-bar {
+      border: 1px solid #a7f3d0 !important;
+      background-color: #ecfdf5 !important;
+      color: #065f46 !important;
+    }
+    .expenses-total-bar {
+      border: 1px solid #fecaca !important;
+      background-color: #fef2f2 !important;
+      color: #991b1b !important;
+    }
+    .reconciliation-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      border-top: 2px solid #4f46e5;
+    }
+    .reconciliation-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #dddddd;
+      font-size: 9.5px;
+    }
+    .reconciliation-label {
+      font-weight: bold;
+      color: #4b5563;
+    }
+    .reconciliation-val {
+      font-weight: bold;
+      text-align: right;
+      width: 150px;
+    }
+    .signature-table {
+      width: 100%;
+      margin-top: 20px;
+      border: none;
+      border-collapse: collapse;
+    }
+    .signature-table td {
+      border: none !important;
+      padding: 5px 0 !important;
+      font-size: 10px !important;
+      font-weight: bold !important;
+      color: #4b5563 !important;
+    }
+    .signature-line {
+      margin-top: 25px;
+      border-top: 1px dashed #9ca3af;
+      width: 150px;
+    }
+    .branding-footer {
+      margin-top: 20px;
+      padding-top: 10px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 9px;
+      color: #9ca3af;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <? for (var p = 0; p < ledgerList.length; p++) { 
+       var day = ledgerList[p];
+       var summary = day.summary;
+       var details = day.details || [];
+       
+       // Normalize field names — server returns receipts/expenses
+       var receiptTotal = parseFloat(summary.receiptTotal || summary.receipts || 0);
+       var expenseTotal = parseFloat(summary.expenseTotal || summary.expenses || 0);
+       var openingCash  = parseFloat(summary.openingCash || 0);
+       var netBalance   = (summary.netBalance != null)
+                           ? parseFloat(summary.netBalance)
+                           : (openingCash + receiptTotal - expenseTotal);
+       var cashSendToHome    = parseFloat(summary.cashSendToHome || 0);
+       var cashDepositToBank = parseFloat(summary.cashDepositToBank || 0);
+       var closingCashInHand = parseFloat(summary.closingCashInHand || 0);
+       
+       var receipts = details.filter(function(d) { return d.section === 'Receipt'; });
+       var expenses = details.filter(function(d) { return d.section === 'Expense'; });
+       
+       receipts.sort(function(a, b) { return a.sl - b.sl; });
+       expenses.sort(function(a, b) { return a.sl - b.sl; });
+  ?>
+  <div class="page">
+    <!-- Company Header with Branding -->
+    <table class="header-table" cellpadding="0" cellspacing="0">
+      <tr>
+        <td valign="middle">
+          <? if (companyLogoBase64) { ?>
+            <img src="<?= companyLogoBase64 ?>" width="120" height="50" style="margin-right: 10px; display: inline-block; vertical-align: middle;" />
+          <? } ?>
+          <div style="display: inline-block; vertical-align: middle;">
+            <div class="company-title"><?= companyName ?></div>
+            <? if (companyAddress) { ?>
+              <div class="company-sub"><?= companyAddress ?></div>
+            <? } ?>
+            <? if (companyGSTIN) { ?>
+              <div class="company-sub" style="font-weight: bold;">GSTIN: <?= companyGSTIN ?></div>
+            <? } ?>
+          </div>
+        </td>
+        <td align="right" valign="middle" class="report-title">
+          <div style="font-weight: bold; font-size: 12px; color: #1f2937;">DAILY LEDGER (ROJNAMCHA)</div>
+          <div class="report-date"><?= formatDateReadableServer(summary.date) ?></div>
+          <div style="font-size: 9px; color: #9ca3af; margin-top: 2px;">Generated by Rojnamcha System</div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Receipts Section -->
+    <div class="section-title receipts-title">RECEIPTS (INFLOW)</div>
+    <table class="ledger-table receipts-table" cellpadding="0" cellspacing="0">
+      <thead>
+        <tr>
+          <th class="col-sl" align="center">SL</th>
+          <th>Details / Description</th>
+          <th style="width: 90px; text-align: right;">Rate (Rs.)</th>
+          <th style="width: 50px; text-align: center;">Qty</th>
+          <th style="width: 110px; text-align: right;">Amount (Rs.)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <? if (receipts.length === 0) { ?>
+          <tr><td colspan="5" style="text-align: center; color: #9ca3af; padding: 10px;">No receipt entries for this day.</td></tr>
+        <? } ?>
+        <? for (var r = 0; r < receipts.length; r++) { 
+             var item = receipts[r];
+        ?>
+          <tr>
+            <td align="center" class="col-sl"><?= item.sl ?></td>
+            <td><?= item.details || '' ?></td>
+            <td align="right"><?= item.rate > 0 ? 'Rs.' + item.rate.toFixed(2) : '' ?></td>
+            <td align="center"><?= item.qty > 0 ? item.qty : '' ?></td>
+            <td align="right" style="font-weight: bold;">Rs.<?= item.amount.toFixed(2) ?></td>
+          </tr>
+        <? } ?>
+      </tbody>
+    </table>
+    <table class="total-bar receipts-total-bar" cellpadding="0" cellspacing="0">
+      <tr>
+        <td align="left">TOTAL RECEIPTS (INFLOW)</td>
+        <td align="right" style="width: 150px; font-weight: bold;">Rs.<?= receiptTotal.toFixed(2) ?></td>
+      </tr>
+    </table>
+
+    <!-- Expenses Section -->
+    <? if (expenses.length > 0) { ?>
+      <div class="section-title expenses-title">EXPENSES (OUTFLOW)</div>
+      <table class="ledger-table expenses-table" cellpadding="0" cellspacing="0">
+        <thead>
+          <tr>
+            <th class="col-sl" align="center">SL</th>
+            <th>Details / Description</th>
+            <th style="width: 90px; text-align: right;">Rate (Rs.)</th>
+            <th style="width: 50px; text-align: center;">Qty</th>
+            <th style="width: 110px; text-align: right;">Amount (Rs.)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <? for (var e = 0; e < expenses.length; e++) { 
+               var item = expenses[e];
+          ?>
+            <tr>
+              <td align="center" class="col-sl"><?= e + 1 ?></td>
+              <td><?= item.details || '' ?></td>
+              <td align="right"><?= item.rate > 0 ? 'Rs.' + item.rate.toFixed(2) : '' ?></td>
+              <td align="center"><?= item.qty > 0 ? item.qty : '' ?></td>
+              <td align="right" style="font-weight: bold;">Rs.<?= item.amount.toFixed(2) ?></td>
+            </tr>
+          <? } ?>
+        </tbody>
+      </table>
+      <table class="total-bar expenses-total-bar" cellpadding="0" cellspacing="0">
+        <tr>
+          <td align="left">TOTAL EXPENSES (OUTFLOW)</td>
+          <td align="right" style="width: 150px; font-weight: bold;">Rs.<?= expenseTotal.toFixed(2) ?></td>
+        </tr>
+      </table>
+    <? } ?>
+
+    <!-- Reconciliation Summary -->
+    <table class="reconciliation-table" cellpadding="0" cellspacing="0">
+      <tr>
+        <td class="reconciliation-label">OPENING CASH IN HAND</td>
+        <td class="reconciliation-val">Rs.<?= openingCash.toFixed(2) ?></td>
+      </tr>
+      <tr>
+        <td class="reconciliation-label">NET LEDGER BALANCE</td>
+        <td class="reconciliation-val">Rs.<?= netBalance.toFixed(2) ?></td>
+      </tr>
+      <tr>
+        <td class="reconciliation-label">
+          CASH SENT TO HOME<?= cashSendToHome > 0 && summary.cashSendToHomeNote ? ' — ' + formatNoteForSummary(summary.cashSendToHomeNote) : '' ?>
+        </td>
+        <td class="reconciliation-val">Rs.<?= cashSendToHome.toFixed(2) ?></td>
+      </tr>
+      <tr>
+        <td class="reconciliation-label">
+          CASH DEPOSIT TO BANK<?= cashDepositToBank > 0 && summary.cashDepositToBankNote ? ' — ' + formatNoteForSummary(summary.cashDepositToBankNote) : '' ?>
+        </td>
+        <td class="reconciliation-val">Rs.<?= cashDepositToBank.toFixed(2) ?></td>
+      </tr>
+      <tr style="background-color: #f0fdf4;">
+        <td class="reconciliation-label" style="color: #065f46; font-size: 12px;">CLOSING CASH IN HAND</td>
+        <td class="reconciliation-val" style="text-decoration: underline; color: #065f46; font-size: 12px;">Rs.<?= closingCashInHand.toFixed(2) ?></td>
+      </tr>
+    </table>
+
+    <!-- Signature Section -->
+    <table class="signature-table" cellpadding="0" cellspacing="0">
+      <tr>
+        <td align="left" style="width: 33%;">
+          Prepared By
+          <div class="signature-line"></div>
+          <div style="font-size: 10px; font-weight: bold; margin-top: 5px; color: #374151;"><?= preparedBy ?></div>
+        </td>
+        <td align="center" style="width: 33%;">
+          Checked By
+          <div class="signature-line" style="margin: 35px auto 0 auto;"></div>
+        </td>
+        <td align="right" style="width: 33%;">
+          Authorized Signature
+          <div class="signature-line" style="margin: 35px 0 0 auto;"></div>
+        </td>
+      </tr>
+    </table>
+ 
+    <!-- Branding Footer -->
+    <div class="branding-footer">
+      <?= companyName ?><?= companyAddress ? ' | ' + companyAddress : '' ?><?= companyGSTIN ? ' | GSTIN: ' + companyGSTIN : '' ?>
+      <br/>Rojnamcha Daily Ledger Management System
+    </div>
+  </div>
+  <? } ?>
+</body>
+</html>
