@@ -7,90 +7,211 @@
   }
 })();
 
-// Standalone Netlify / Proxy Detection and API Interceptor
+// Standalone / Proxy Detection and API Interceptor
 const isStandalone = typeof google === 'undefined' || !google.script || !google.script.run || (window.location.hostname !== 'script.google.com' && !window.location.hostname.endsWith('.googleusercontent.com'));
 
-if (isStandalone) {
-  function callBackendApi(action, args, successHandler, failureHandler) {
-    const apiUrl = localStorage.getItem('rojnamcha_api_url') || 'https://script.google.com/macros/s/AKfycbx8h0orszwV29cKrVCUbrR-59HzsF1_aCFfuSBRVpQp3VnzI0carkCRWt5M_eb-Ra-DBA/exec';
-    if (!apiUrl) {
-      if (failureHandler) {
-        failureHandler(new Error('API URL is not configured.'));
-      }
-      showApiConfigScreen();
-      return;
-    }
+// Active Database Settings
+let dbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
+let firebaseApp = null;
+let db = null; // Firestore reference
 
-    fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain'
-      },
-      body: JSON.stringify({ action: action, args: args })
-    })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error('HTTP network error: ' + response.statusText);
-      }
-      return response.json();
-    })
-    .then(res => {
-      if (res && res.success === false) {
-        if (failureHandler) {
-          failureHandler(new Error(res.error || 'API execution error'));
-        } else {
-          showToast(res.error || 'Server error occurred', 'error');
-        }
-      } else {
-        if (successHandler) {
-          successHandler(res);
-        }
-      }
-    })
-    .catch(err => {
-      console.error('API call failed:', err);
-      if (failureHandler) {
-        failureHandler(err);
-      } else {
-        showToast('API call failed: ' + err.message, 'error');
-      }
-    });
+// Client-side SHA-256 password hashing (matches Apps Script behavior)
+async function clientHashPassword(password) {
+  const msgUint8 = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+
+// 1. GOOGLE SHEETS API INTERCEPTOR
+function callBackendApi(action, args, successHandler, failureHandler) {
+  const apiUrl = localStorage.getItem('rojnamcha_api_url') || 'https://script.google.com/macros/s/AKfycbx8h0orszwV29cKrVCUbrR-59HzsF1_aCFfuSBRVpQp3VnzI0carkCRWt5M_eb-Ra-DBA/exec';
+  if (!apiUrl) {
+    if (failureHandler) {
+      failureHandler(new Error('API URL is not configured.'));
+    }
+    showApiConfigScreen();
+    return;
   }
 
-  function createRunContext() {
-    let successHandler = null;
-    let failureHandler = null;
-    const context = {};
-    const proxy = new Proxy(context, {
-      get(target, prop) {
-        if (prop === 'withSuccessHandler') {
-          return function(h) {
-            successHandler = h;
-            return proxy;
-          };
-        }
-        if (prop === 'withFailureHandler') {
-          return function(h) {
-            failureHandler = h;
-            return proxy;
-          };
-        }
-        return function(...args) {
-          callBackendApi(prop, args, successHandler, failureHandler);
+  fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain'
+    },
+    body: JSON.stringify({ action: action, args: args })
+  })
+  .then(response => {
+    if (!response.ok) {
+      throw new Error('HTTP network error: ' + response.statusText);
+    }
+    return response.json();
+  })
+  .then(res => {
+    if (res && res.success === false) {
+      if (failureHandler) {
+        failureHandler(new Error(res.error || 'API execution error'));
+      } else {
+        showToast(res.error || 'Server error occurred', 'error');
+      }
+    } else {
+      if (successHandler) {
+        successHandler(res);
+      }
+    }
+  })
+  .catch(err => {
+    console.error('API call failed:', err);
+    if (failureHandler) {
+      failureHandler(err);
+    } else {
+      showToast('API call failed: ' + err.message, 'error');
+    }
+  });
+}
+
+function createRunContext() {
+  let successHandler = null;
+  let failureHandler = null;
+  const context = {};
+  const proxy = new Proxy(context, {
+    get(target, prop) {
+      if (prop === 'withSuccessHandler') {
+        return function(h) {
+          successHandler = h;
+          return proxy;
         };
       }
-    });
-    return proxy;
-  }
-
-  window.google = {
-    script: {
-      get run() {
-        return createRunContext();
+      if (prop === 'withFailureHandler') {
+        return function(h) {
+          failureHandler = h;
+          return proxy;
+        };
       }
+      return function(...args) {
+        callBackendApi(prop, args, successHandler, failureHandler);
+      };
     }
-  };
+  });
+  return proxy;
 }
+
+// 2. FIREBASE FIRESTORE API INTERCEPTOR
+function callFirebaseApi(action, args, successHandler, failureHandler) {
+  const fnName = "firebase_" + action;
+  if (typeof window[fnName] === 'function') {
+    window[fnName](args, successHandler, failureHandler);
+  } else {
+    console.error("Firebase API action not implemented:", action);
+    if (failureHandler) failureHandler(new Error("Not implemented in Firebase mode: " + action));
+  }
+}
+
+function createFirebaseRunContext() {
+  let successHandler = null;
+  let failureHandler = null;
+  const context = {};
+  const proxy = new Proxy(context, {
+    get(target, prop) {
+      if (prop === 'withSuccessHandler') {
+        return function(h) {
+          successHandler = h;
+          return proxy;
+        };
+      }
+      if (prop === 'withFailureHandler') {
+        return function(h) {
+          failureHandler = h;
+          return proxy;
+        };
+      }
+      return function(...args) {
+        callFirebaseApi(prop, args, successHandler, failureHandler);
+      };
+    }
+  });
+  return proxy;
+}
+
+// DATABASE ENGINE SWITCHER
+const originalGoogle = window.google;
+
+function setupGoogleScriptRunProxy() {
+  dbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
+  
+  if (dbMode === 'firebase') {
+    window.google = {
+      script: {
+        get run() {
+          return createFirebaseRunContext();
+        }
+      }
+    };
+  } else if (isStandalone) {
+    window.google = {
+      script: {
+        get run() {
+          return createRunContext();
+        }
+      }
+    };
+  } else {
+    window.google = originalGoogle || {
+      script: {
+        get run() {
+          return createRunContext();
+        }
+      }
+    };
+  }
+}
+
+function initDatabaseConnection() {
+  dbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
+  
+  if (dbMode === 'firebase') {
+    const configStr = localStorage.getItem('rojnamcha_firebase_config');
+    if (!configStr) {
+      showApiConfigScreen();
+      return false;
+    }
+    try {
+      const config = JSON.parse(configStr);
+      if (firebase.apps.length === 0) {
+        firebaseApp = firebase.initializeApp(config);
+      } else {
+        firebaseApp = firebase.app();
+      }
+      db = firebase.firestore();
+      
+      // Attempt local storage cache persistence
+      db.enablePersistence().catch(err => {
+        console.warn("Firestore offline persistence failed: ", err.code);
+      });
+      return true;
+    } catch(err) {
+      console.error("Firebase connection initialization failed:", err);
+      showToast("Firebase Config error: " + err.message, "error");
+      showApiConfigScreen();
+      return false;
+    }
+  }
+  return true;
+}
+
+// UI Setup Trigger Functions
+window.toggleDbConfigFields = function(mode) {
+  const sheetsGroup = document.getElementById('sheets-config-group');
+  const firebaseGroup = document.getElementById('firebase-config-group');
+  if (mode === 'firebase') {
+    if (sheetsGroup) sheetsGroup.style.display = 'none';
+    if (firebaseGroup) firebaseGroup.style.display = 'block';
+  } else {
+    if (sheetsGroup) sheetsGroup.style.display = 'block';
+    if (firebaseGroup) firebaseGroup.style.display = 'none';
+  }
+};
 
 function showApiConfigScreen() {
   document.querySelector('.app-container').style.display = 'none';
@@ -98,56 +219,949 @@ function showApiConfigScreen() {
   document.getElementById('register-screen-overlay').style.display = 'none';
   document.getElementById('forgot-screen-overlay').style.display = 'none';
   
+  const modeSelect = document.getElementById('db-mode-select');
+  const currentMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
+  if (modeSelect) {
+    modeSelect.value = currentMode;
+    toggleDbConfigFields(currentMode);
+  }
+
   const setupUrlInput = document.getElementById('setup-api-url');
-  if (setupUrlInput && !setupUrlInput.value) {
-    setupUrlInput.value = 'https://script.google.com/macros/s/AKfycbx8h0orszwV29cKrVCUbrR-59HzsF1_aCFfuSBRVpQp3VnzI0carkCRWt5M_eb-Ra-DBA/exec';
+  if (setupUrlInput) {
+    setupUrlInput.value = localStorage.getItem('rojnamcha_api_url') || 'https://script.google.com/macros/s/AKfycbx8h0orszwV29cKrVCUbrR-59HzsF1_aCFfuSBRVpQp3VnzI0carkCRWt5M_eb-Ra-DBA/exec';
+  }
+  
+  const firebaseInput = document.getElementById('setup-firebase-config');
+  if (firebaseInput) {
+    firebaseInput.value = localStorage.getItem('rojnamcha_firebase_config') || '';
   }
   
   document.getElementById('api-config-screen-overlay').style.display = 'flex';
 }
 
 window.handleApiConfigSubmit = function() {
-  const urlInput = document.getElementById('setup-api-url');
-  const url = urlInput.value.trim();
-  if (!url) {
-    showToast('Please enter a valid URL', 'error');
-    return;
-  }
-
-  if (!url.startsWith('https://script.google.com/macros/s/') || !url.endsWith('/exec')) {
-    if (!confirm('The URL does not match standard Apps Script Web App structure (macros/s/.../exec). Proceed anyway?')) {
+  const modeSelect = document.getElementById('db-mode-select');
+  const mode = modeSelect ? modeSelect.value : 'sheets';
+  
+  if (mode === 'sheets') {
+    const urlInput = document.getElementById('setup-api-url');
+    const url = urlInput.value.trim();
+    if (!url) {
+      showToast('Please enter a valid URL', 'error');
       return;
     }
-  }
 
-  showLoading(true, 'Testing connection...');
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ action: 'getCompanyProfile', args: [] })
-  })
-  .then(response => response.json())
-  .then(res => {
-    showLoading(false);
-    if (res && res.companyName) {
-      localStorage.setItem('rojnamcha_api_url', url);
-      showToast('Backend connected successfully!', 'success');
-      document.getElementById('api-config-screen-overlay').style.display = 'none';
-      
-      const profileApiField = document.getElementById('profile-api-url');
-      if (profileApiField) {
-        profileApiField.value = url;
+    if (!url.startsWith('https://script.google.com/macros/s/') || !url.endsWith('/exec')) {
+      if (!confirm('The URL does not match standard Apps Script Web App structure (macros/s/.../exec). Proceed anyway?')) {
+        return;
+      }
+    }
+
+    showLoading(true, 'Testing connection...');
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'getCompanyProfile', args: [] })
+    })
+    .then(response => response.json())
+    .then(res => {
+      showLoading(false);
+      if (res && res.companyName) {
+        localStorage.setItem('rojnamcha_db_mode', 'sheets');
+        localStorage.setItem('rojnamcha_api_url', url);
+        showToast('Backend connected successfully!', 'success');
+        document.getElementById('api-config-screen-overlay').style.display = 'none';
+        
+        setupGoogleScriptRunProxy();
+        
+        const today = new Date().toISOString().split('T')[0];
+        showLoading(true, 'Loading initial data...');
+        google.script.run
+          .withSuccessHandler(function(initData) {
+            handleInitData(initData);
+            showAuthScreen('login');
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Loading failed: ' + err.message, 'error');
+          })
+          .getInitialData(today);
+      } else {
+        showToast('Failed to connect to Google Sheets backend.', 'error');
+      }
+    })
+    .catch(err => {
+      showLoading(false);
+      showToast('Connection failed: ' + err.message, 'error');
+    });
+  } else {
+    // Firebase mode
+    const configInput = document.getElementById('setup-firebase-config');
+    const configStr = configInput.value.trim();
+    if (!configStr) {
+      showToast('Please enter your Firebase Configuration JSON', 'error');
+      return;
+    }
+    
+    try {
+      const parsed = JSON.parse(configStr);
+      if (!parsed.apiKey || !parsed.projectId) {
+        throw new Error('Config missing apiKey or projectId');
       }
       
-      checkSession();
-    } else {
-      showToast('Connection failed: Invalid API response.', 'error');
+      localStorage.setItem('rojnamcha_db_mode', 'firebase');
+      localStorage.setItem('rojnamcha_firebase_config', configStr);
+      showToast('Firebase configuration saved!', 'success');
+      document.getElementById('api-config-screen-overlay').style.display = 'none';
+      
+      const initialized = initDatabaseConnection();
+      if (initialized) {
+        setupGoogleScriptRunProxy();
+        
+        const today = new Date().toISOString().split('T')[0];
+        showLoading(true, 'Connecting to Firestore...');
+        google.script.run
+          .withSuccessHandler(function(initData) {
+            handleInitData(initData);
+            showAuthScreen('login');
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Firestore fetch failed: ' + err.message, 'error');
+          })
+          .getInitialData(today);
+      }
+    } catch(err) {
+      showToast('Invalid Firebase configuration JSON: ' + err.message, 'error');
     }
-  })
-  .catch(err => {
-    showLoading(false);
-    showToast('Connection failed: ' + err.message, 'error');
-  });
+  }
+};
+
+// Initialize Proxy immediately
+setupGoogleScriptRunProxy();
+
+// 3. FIREBASE FIRESTORE ENDPOINT HANDLERS
+window.firebase_loginUser = async function(args, successHandler, failureHandler) {
+  try {
+    const username = args[0].trim();
+    const password = args[1];
+    const normalizedUsername = username.toLowerCase();
+    const inputHash = await clientHashPassword(password);
+    
+    const userDoc = await db.collection('users').doc(normalizedUsername).get();
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      if (userData.passwordHash === inputHash) {
+        if (userData.status === 'Approved') {
+          successHandler({
+            success: true,
+            user: {
+              username: userData.username,
+              name: userData.name,
+              email: userData.email,
+              role: userData.role,
+              status: userData.status,
+              passwordHash: inputHash
+            }
+          });
+        } else if (userData.status === 'Pending') {
+          successHandler({ success: false, message: 'Your account is pending admin approval.' });
+        } else {
+          successHandler({ success: false, message: 'Your account access has been restricted/rejected.' });
+        }
+      } else {
+        successHandler({ success: false, message: 'Invalid password. Please try again.' });
+      }
+    } else {
+      // Auto seed admin user on fresh database setup
+      const allUsersQuery = await db.collection('users').limit(1).get();
+      if (allUsersQuery.empty && normalizedUsername === 'admin' && password === 'admin') {
+        const defaultAdmin = {
+          username: 'admin',
+          passwordHash: inputHash,
+          name: 'Administrator',
+          email: 'admin@agency.com',
+          role: 'Admin',
+          status: 'Approved',
+          resetRequest: false,
+          createdAt: new Date().toISOString()
+        };
+        await db.collection('users').doc('admin').set(defaultAdmin);
+        successHandler({
+          success: true,
+          user: {
+            username: 'admin',
+            name: 'Administrator',
+            email: 'admin@agency.com',
+            role: 'Admin',
+            status: 'Approved',
+            passwordHash: inputHash
+          }
+        });
+      } else {
+        successHandler({ success: false, message: 'Username not found.' });
+      }
+    }
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_registerUser = async function(args, successHandler, failureHandler) {
+  try {
+    const username = args[0].trim();
+    const password = args[1];
+    const name = args[2];
+    const email = args[3];
+    const normalizedUsername = username.toLowerCase();
+    
+    const userDoc = await db.collection('users').doc(normalizedUsername).get();
+    if (userDoc.exists) {
+      successHandler({ success: false, message: 'Username is already taken.' });
+    } else {
+      const passwordHash = await clientHashPassword(password);
+      await db.collection('users').doc(normalizedUsername).set({
+        username: normalizedUsername,
+        passwordHash: passwordHash,
+        name: name,
+        email: email,
+        role: 'User',
+        status: 'Pending',
+        resetRequest: false,
+        createdAt: new Date().toISOString()
+      });
+      successHandler({ success: true, message: 'Registration submitted. Please contact Admin for approval.' });
+    }
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_validateSession = async function(args, successHandler, failureHandler) {
+  try {
+    const username = args[0].toLowerCase();
+    const passwordHash = args[1];
+    
+    const userDoc = await db.collection('users').doc(username).get();
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      if (userData.passwordHash === passwordHash && userData.status === 'Approved') {
+        successHandler({
+          success: true,
+          user: {
+            username: userData.username,
+            name: userData.name,
+            email: userData.email,
+            role: userData.role,
+            status: userData.status,
+            passwordHash: passwordHash
+          }
+        });
+        return;
+      }
+    }
+    successHandler({ success: false });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_getInitialData = async function(args, successHandler, failureHandler) {
+  try {
+    const dateStr = args[0];
+    
+    // 1. Get/Seed Company Profile
+    let profile = {
+      companyName: 'SHIV SHAKTI HP GAS AGENCY',
+      companyAddress: 'PANDAUL BAZAR, MADHUBANI-847234',
+      companyGSTIN: '10AEYPK3674C2ZH',
+      companyLogo: ''
+    };
+    const profileDoc = await db.collection('company_profile').doc('profile').get();
+    if (profileDoc.exists) {
+      profile = Object.assign(profile, profileDoc.data());
+    } else {
+      await db.collection('company_profile').doc('profile').set(profile);
+    }
+    
+    // 2. Get/Seed Dropdown Options
+    const options = { receipts: [], expenses: [] };
+    const optionsSnap = await db.collection('dropdown_options').get();
+    if (!optionsSnap.empty) {
+      optionsSnap.forEach(doc => {
+        const o = doc.data();
+        if (o.section === 'Receipt') {
+          options.receipts.push({ details: o.details, defaultRate: o.defaultRate });
+        } else {
+          options.expenses.push({ details: o.details, defaultRate: o.defaultRate });
+        }
+      });
+    } else {
+      const defaultOptions = [
+        { section: 'Receipt', details: 'NAME TRANSFER A TO B', defaultRate: 1777.00 },
+        { section: 'Receipt', details: 'REGULATOR LEAK', defaultRate: 100.00 },
+        { section: 'Receipt', details: 'DEATH CASE name transfer', defaultRate: 177.00 },
+        { section: 'Receipt', details: 'NAME TRANSFER PUMY', defaultRate: 143.00 },
+        { section: 'Receipt', details: 'CTA IN', defaultRate: 177.00 },
+        { section: 'Receipt', details: 'TV OUT (615102)', defaultRate: 118.00 },
+        { section: 'Receipt', details: '19 KG SALE', defaultRate: 3500.00 },
+        { section: 'Receipt', details: 'REFILLING 14.2 KG', defaultRate: 1013.00 },
+        { section: 'Receipt', details: 'REFILLING HD SALE 14.2 KG', defaultRate: 1013.00 },
+        { section: 'Expense', details: 'TV OUT CASH RETURN (615102)', defaultRate: 1800.00 },
+        { section: 'Expense', details: '19 KG SUMIT ENG', defaultRate: 3500.00 },
+        { section: 'Expense', details: 'DISCOUNT 19 KG', defaultRate: 100.00 },
+        { section: 'Expense', details: '19 KG SECURITY RETURN (RAKSH jHA)', defaultRate: 26000.00 },
+        { section: 'Expense', details: 'REFIL PAY ONLINE 14.2 KG', defaultRate: 1013.00 },
+        { section: 'Expense', details: 'NAME TRANSFER ONLINE PAID', defaultRate: 1949.00 },
+        { section: 'Expense', details: 'Expy By Godam Labour Under Construction', defaultRate: 12800.00 }
+      ];
+      for (let o of defaultOptions) {
+        const id = o.section + '_' + o.details.replace(/\//g, '_');
+        await db.collection('dropdown_options').doc(id).set(o);
+        if (o.section === 'Receipt') {
+          options.receipts.push({ details: o.details, defaultRate: o.defaultRate });
+        } else {
+          options.expenses.push({ details: o.details, defaultRate: o.defaultRate });
+        }
+      }
+    }
+    
+    // 3. Get Existing Dates
+    const dates = [];
+    const rojnamchaSnap = await db.collection('rojnamcha').get();
+    rojnamchaSnap.forEach(doc => {
+      dates.push(doc.id);
+    });
+    dates.sort((a, b) => new Date(b) - new Date(a));
+    
+    // 4. Get Rojnamcha Data
+    let rojnamchaData = null;
+    const summaryDoc = await db.collection('rojnamcha').doc(dateStr).get();
+    const detailsSnap = await db.collection('rojnamcha_details').where('date', '==', dateStr).get();
+    
+    if (summaryDoc.exists || !detailsSnap.empty) {
+      const summary = summaryDoc.exists ? summaryDoc.data() : {
+        date: dateStr,
+        receiptTotal: 0,
+        expenseTotal: 0,
+        netBalance: 0,
+        cashSendToHome: 0,
+        cashDepositToBank: 0,
+        closingCashInHand: 0,
+        cashSendToHomeNote: '',
+        cashDepositToBankNote: ''
+      };
+      
+      const details = [];
+      detailsSnap.forEach(doc => {
+        details.push(doc.data());
+      });
+      details.sort((a, b) => a.sl - b.sl);
+      
+      rojnamchaData = { summary, details };
+    }
+    
+    // 5. Get Previous Closing Cash
+    let previousClosingCash = 0;
+    if (!rojnamchaData && dates.length > 0) {
+      const targetDate = new Date(dateStr);
+      let bestDate = null;
+      for (let dStr of dates) {
+        const d = new Date(dStr);
+        if (d < targetDate) {
+          if (!bestDate || d > bestDate) {
+            bestDate = d;
+            const prevDoc = await db.collection('rojnamcha').doc(dStr).get();
+            if (prevDoc.exists) {
+              previousClosingCash = prevDoc.data().closingCashInHand || 0;
+            }
+          }
+        }
+      }
+    }
+    
+    successHandler({
+      profile,
+      options,
+      dates,
+      rojnamchaData,
+      previousClosingCash
+    });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_getRojnamchaData = async function(args, successHandler, failureHandler) {
+  try {
+    const dateStr = args[0];
+    
+    const summaryDoc = await db.collection('rojnamcha').doc(dateStr).get();
+    const detailsSnap = await db.collection('rojnamcha_details').where('date', '==', dateStr).get();
+    
+    if (summaryDoc.exists || !detailsSnap.empty) {
+      const summary = summaryDoc.exists ? summaryDoc.data() : {
+        date: dateStr,
+        receiptTotal: 0,
+        expenseTotal: 0,
+        netBalance: 0,
+        cashSendToHome: 0,
+        cashDepositToBank: 0,
+        closingCashInHand: 0,
+        cashSendToHomeNote: '',
+        cashDepositToBankNote: ''
+      };
+      const details = [];
+      detailsSnap.forEach(doc => {
+        details.push(doc.data());
+      });
+      details.sort((a, b) => a.sl - b.sl);
+      successHandler({ summary, details });
+    } else {
+      // Find previous closing cash
+      const datesSnap = await db.collection('rojnamcha').get();
+      const dates = [];
+      datesSnap.forEach(doc => dates.push(doc.id));
+      
+      const targetDate = new Date(dateStr);
+      let bestDate = null;
+      let previousClosingCash = 0;
+      
+      for (let dStr of dates) {
+        const d = new Date(dStr);
+        if (d < targetDate) {
+          if (!bestDate || d > bestDate) {
+            bestDate = d;
+            const prevDoc = await db.collection('rojnamcha').doc(dStr).get();
+            if (prevDoc.exists) {
+              previousClosingCash = prevDoc.data().closingCashInHand || 0;
+            }
+          }
+        }
+      }
+      successHandler({ isNew: true, previousClosingCash });
+    }
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_saveRojnamcha = async function(args, successHandler, failureHandler) {
+  try {
+    const dateStr = args[0];
+    const summary = args[1];
+    const details = args[2];
+    
+    // Save Summary
+    const summaryData = {
+      date: dateStr,
+      receiptTotal: summary.receiptTotal,
+      expenseTotal: summary.expenseTotal,
+      netBalance: summary.netBalance,
+      cashSendToHome: summary.cashSendToHome,
+      cashDepositToBank: summary.cashDepositToBank,
+      closingCashInHand: summary.closingCashInHand,
+      cashSendToHomeNote: summary.cashSendToHomeNote || '',
+      cashDepositToBankNote: summary.cashDepositToBankNote || '',
+      timestamp: new Date().toISOString()
+    };
+    await db.collection('rojnamcha').doc(dateStr).set(summaryData);
+    
+    // Clear old details
+    const detailsSnap = await db.collection('rojnamcha_details').where('date', '==', dateStr).get();
+    const batch = db.batch();
+    detailsSnap.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
+    
+    // Write new details
+    const addBatch = db.batch();
+    let count = 0;
+    for (let item of details) {
+      if (item.details && item.details.trim() !== '') {
+        const id = dateStr + '_' + item.section + '_' + item.sl;
+        const ref = db.collection('rojnamcha_details').doc(id);
+        addBatch.set(ref, {
+          date: dateStr,
+          section: item.section,
+          sl: item.sl,
+          details: item.details.trim(),
+          rate: item.rate,
+          qty: item.qty,
+          amount: item.amount
+        });
+        count++;
+      }
+    }
+    if (count > 0) {
+      await addBatch.commit();
+    }
+    successHandler({ success: true });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_getPreviousClosingCash = async function(args, successHandler, failureHandler) {
+  try {
+    const dateStr = args[0];
+    const targetDate = new Date(dateStr);
+    
+    const datesSnap = await db.collection('rojnamcha').get();
+    const dates = [];
+    datesSnap.forEach(doc => dates.push(doc.id));
+    
+    let bestDate = null;
+    let prevClosing = 0;
+    
+    for (let dStr of dates) {
+      const d = new Date(dStr);
+      if (d < targetDate) {
+        if (!bestDate || d > bestDate) {
+          bestDate = d;
+          const prevDoc = await db.collection('rojnamcha').doc(dStr).get();
+          if (prevDoc.exists) {
+            prevClosing = prevDoc.data().closingCashInHand || 0;
+          }
+        }
+      }
+    }
+    successHandler(prevClosing);
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_getDropdownOptions = async function(args, successHandler, failureHandler) {
+  try {
+    const options = { receipts: [], expenses: [] };
+    const optionsSnap = await db.collection('dropdown_options').get();
+    optionsSnap.forEach(doc => {
+      const o = doc.data();
+      if (o.section === 'Receipt') {
+        options.receipts.push({ details: o.details, defaultRate: o.defaultRate });
+      } else {
+        options.expenses.push({ details: o.details, defaultRate: o.defaultRate });
+      }
+    });
+    successHandler(options);
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_saveDropdownOption = async function(args, successHandler, failureHandler) {
+  try {
+    const section = args[0];
+    const details = args[1].trim();
+    const defaultRate = args[2];
+    const id = section + '_' + details.replace(/\//g, '_');
+    
+    await db.collection('dropdown_options').doc(id).set({
+      section,
+      details,
+      defaultRate
+    });
+    successHandler({ success: true });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_deleteDropdownOption = async function(args, successHandler, failureHandler) {
+  try {
+    const section = args[0];
+    const details = args[1].trim();
+    const id = section + '_' + details.replace(/\//g, '_');
+    
+    await db.collection('dropdown_options').doc(id).delete();
+    successHandler({ success: true });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_updateDropdownOption = async function(args, successHandler, failureHandler) {
+  try {
+    const section = args[0];
+    const oldDetails = args[1].trim();
+    const newDetails = args[2].trim();
+    const newRate = args[3];
+    
+    const oldId = section + '_' + oldDetails.replace(/\//g, '_');
+    const newId = section + '_' + newDetails.replace(/\//g, '_');
+    
+    await db.collection('dropdown_options').doc(oldId).delete();
+    await db.collection('dropdown_options').doc(newId).set({
+      section,
+      details: newDetails,
+      defaultRate: newRate
+    });
+    successHandler({ success: true });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_getExistingDates = async function(args, successHandler, failureHandler) {
+  try {
+    const dates = [];
+    const snap = await db.collection('rojnamcha').get();
+    snap.forEach(doc => dates.push(doc.id));
+    dates.sort((a, b) => new Date(b) - new Date(a));
+    successHandler(dates);
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_getRangeReport = async function(args, successHandler, failureHandler) {
+  try {
+    const start = args[0];
+    const end = args[1];
+    
+    const summariesSnap = await db.collection('rojnamcha').where('date', '>=', start).where('date', '<=', end).get();
+    const records = [];
+    const summariesMap = {};
+    
+    summariesSnap.forEach(doc => {
+      const s = doc.data();
+      summariesMap[s.date] = s;
+    });
+    
+    const detailsSnap = await db.collection('rojnamcha_details')
+      .where('date', '>=', start)
+      .where('date', '<=', end)
+      .where('section', '==', 'Receipt')
+      .where('sl', '==', 1)
+      .get();
+      
+    const openingCashMap = {};
+    detailsSnap.forEach(doc => {
+      const d = doc.data();
+      openingCashMap[d.date] = d.amount || 0;
+    });
+    
+    for (let dStr in summariesMap) {
+      const s = summariesMap[dStr];
+      const opCash = openingCashMap[dStr] || 0;
+      const dynamicReceipts = Math.max(0, (s.receiptTotal || 0) - opCash);
+      
+      records.push({
+        date: dStr,
+        openingCash: opCash,
+        receipts: dynamicReceipts,
+        expenses: s.expenseTotal || 0,
+        cashSendToHome: s.cashSendToHome || 0,
+        cashSendToHomeNote: s.cashSendToHomeNote || '',
+        cashDepositToBank: s.cashDepositToBank || 0,
+        cashDepositToBankNote: s.cashDepositToBankNote || '',
+        closingCashInHand: s.closingCashInHand || 0
+      });
+    }
+    
+    records.sort((a, b) => new Date(a.date) - new Date(b.date));
+    successHandler(records);
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_getRangeAuditData = async function(args, successHandler, failureHandler) {
+  try {
+    const start = args[0];
+    const end = args[1];
+    
+    const summariesSnap = await db.collection('rojnamcha').where('date', '>=', start).where('date', '<=', end).get();
+    const summaries = [];
+    summariesSnap.forEach(doc => {
+      const s = doc.data();
+      summaries.push({
+        date: s.date,
+        cashSendToHome: s.cashSendToHome || 0,
+        cashSendToHomeNote: s.cashSendToHomeNote || '',
+        cashDepositToBank: s.cashDepositToBank || 0,
+        cashDepositToBankNote: s.cashDepositToBankNote || '',
+        closingCashInHand: s.closingCashInHand || 0
+      });
+    });
+    
+    const detailsSnap = await db.collection('rojnamcha_details')
+      .where('date', '>=', start)
+      .where('date', '<=', end)
+      .where('section', '==', 'Expense')
+      .get();
+      
+    const onlinePayments = [];
+    const ONLINE_KEYWORDS = ['online', 'gpay', 'phonepe', 'paytm', 'upi', 'digital', 'neft', 'rtgs', 'imps', 'bhim', 'netbanking', 'internet pay', 'net pay'];
+    
+    detailsSnap.forEach(doc => {
+      const d = doc.data();
+      const detailsText = d.details || '';
+      const lower = detailsText.toLowerCase();
+      const isOnline = ONLINE_KEYWORDS.some(k => lower.indexOf(k) > -1);
+      if (isOnline) {
+        onlinePayments.push({
+          date: d.date,
+          details: d.details,
+          rate: d.rate || 0,
+          qty: d.qty || 0,
+          amount: d.amount || 0
+        });
+      }
+    });
+    
+    summaries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    onlinePayments.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    successHandler({ summaries, onlinePayments });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_getCompanyProfile = async function(args, successHandler, failureHandler) {
+  try {
+    const doc = await db.collection('company_profile').doc('profile').get();
+    if (doc.exists) {
+      successHandler(doc.data());
+    } else {
+      successHandler({ companyName: '', companyAddress: '', companyGSTIN: '', companyLogo: '' });
+    }
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_saveCompanyProfile = async function(args, successHandler, failureHandler) {
+  try {
+    const profile = args[0];
+    await db.collection('company_profile').doc('profile').set(profile);
+    successHandler({ success: true });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_sendLedgerEmail = function(args, successHandler, failureHandler) {
+  // Delegate email sending to Apps Script Web App API if URL is configured
+  const sheetsApiUrl = localStorage.getItem('rojnamcha_api_url');
+  if (sheetsApiUrl) {
+    fetch(sheetsApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'sendLedgerEmail', args: args })
+    })
+    .then(r => r.json())
+    .then(res => successHandler(res))
+    .catch(err => {
+      console.warn("Apps Script email delegate failed: ", err);
+      showToast("Email sending failed. Please use Print PDF option.", "error");
+      successHandler({ success: false, error: "Apps Script API delegate failed" });
+    });
+  } else {
+    showToast("Email service requires Google Apps Script API URL config in settings.", "warning");
+    successHandler({ success: false, error: "Apps Script API not configured." });
+  }
+};
+
+window.firebase_adminGetUserList = async function(args, successHandler, failureHandler) {
+  try {
+    const caller = args[0];
+    const hash = args[1];
+    
+    // Verify caller credentials
+    const callerDoc = await db.collection('users').doc(caller).get();
+    if (!callerDoc.exists || callerDoc.data().passwordHash !== hash || callerDoc.data().role !== 'Admin') {
+      if (failureHandler) failureHandler(new Error('Unauthorized access'));
+      return;
+    }
+    
+    const users = [];
+    const snap = await db.collection('users').get();
+    snap.forEach(doc => {
+      users.push(doc.data());
+    });
+    successHandler(users);
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_adminAddUser = async function(args, successHandler, failureHandler) {
+  try {
+    const caller = args[0];
+    const hash = args[1];
+    const user = args[2];
+    
+    const callerDoc = await db.collection('users').doc(caller).get();
+    if (!callerDoc.exists || callerDoc.data().passwordHash !== hash || callerDoc.data().role !== 'Admin') {
+      if (failureHandler) failureHandler(new Error('Unauthorized access'));
+      return;
+    }
+    
+    const targetUsername = user.username.trim().toLowerCase();
+    const userDoc = await db.collection('users').doc(targetUsername).get();
+    if (userDoc.exists) {
+      successHandler({ success: false, message: 'Username already exists.' });
+      return;
+    }
+    
+    const pHash = await clientHashPassword(user.password || '123456');
+    await db.collection('users').doc(targetUsername).set({
+      username: targetUsername,
+      passwordHash: pHash,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      resetRequest: false,
+      createdAt: new Date().toISOString()
+    });
+    successHandler({ success: true, message: 'User added successfully.' });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_adminUpdateUser = async function(args, successHandler, failureHandler) {
+  try {
+    const caller = args[0];
+    const hash = args[1];
+    const targetUsername = args[2].toLowerCase();
+    const updatedData = args[3];
+    
+    const callerDoc = await db.collection('users').doc(caller).get();
+    if (!callerDoc.exists || callerDoc.data().passwordHash !== hash || callerDoc.data().role !== 'Admin') {
+      if (failureHandler) failureHandler(new Error('Unauthorized access'));
+      return;
+    }
+    
+    await db.collection('users').doc(targetUsername).update({
+      name: updatedData.name,
+      email: updatedData.email,
+      role: updatedData.role,
+      status: updatedData.status
+    });
+    successHandler({ success: true });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_adminDeleteUser = async function(args, successHandler, failureHandler) {
+  try {
+    const caller = args[0];
+    const hash = args[1];
+    const targetUsername = args[2].toLowerCase();
+    
+    const callerDoc = await db.collection('users').doc(caller).get();
+    if (!callerDoc.exists || callerDoc.data().passwordHash !== hash || callerDoc.data().role !== 'Admin') {
+      if (failureHandler) failureHandler(new Error('Unauthorized access'));
+      return;
+    }
+    
+    await db.collection('users').doc(targetUsername).delete();
+    successHandler({ success: true });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_adminResetPassword = async function(args, successHandler, failureHandler) {
+  try {
+    const caller = args[0];
+    const hash = args[1];
+    const targetUsername = args[2].toLowerCase();
+    const newPassword = args[3];
+    
+    const callerDoc = await db.collection('users').doc(caller).get();
+    if (!callerDoc.exists || callerDoc.data().passwordHash !== hash || callerDoc.data().role !== 'Admin') {
+      if (failureHandler) failureHandler(new Error('Unauthorized access'));
+      return;
+    }
+    
+    const pHash = await clientHashPassword(newPassword);
+    await db.collection('users').doc(targetUsername).update({
+      passwordHash: pHash,
+      resetRequest: false
+    });
+    successHandler({ success: true });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_requestPasswordReset = async function(args, successHandler, failureHandler) {
+  try {
+    const username = args[0].trim().toLowerCase();
+    const userDoc = await db.collection('users').doc(username).get();
+    if (userDoc.exists) {
+      await db.collection('users').doc(username).update({ resetRequest: true });
+      successHandler({ success: true, message: 'Password reset request submitted. Please ask Admin to approve.' });
+    } else {
+      successHandler({ success: false, message: 'Username not found.' });
+    }
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_exportAllDataJSON = async function(args, successHandler, failureHandler) {
+  try {
+    const collections = ['users', 'dropdown_options', 'company_profile', 'rojnamcha', 'rojnamcha_details'];
+    const backup = {
+      version: "1.1_firebase",
+      exportedAt: new Date().toISOString(),
+      data: {}
+    };
+    for (let col of collections) {
+      const snap = await db.collection(col).get();
+      backup.data[col] = {};
+      snap.forEach(doc => {
+        backup.data[col][doc.id] = doc.data();
+      });
+    }
+    successHandler(JSON.stringify(backup));
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_importAllDataJSON = async function(args, successHandler, failureHandler) {
+  try {
+    const backupDataStr = args[0];
+    const backup = JSON.parse(backupDataStr);
+    if (!backup || !backup.data) {
+      successHandler({ success: false, error: 'Invalid backup file format' });
+      return;
+    }
+    
+    for (let col in backup.data) {
+      const snap = await db.collection(col).get();
+      const clearBatch = db.batch();
+      snap.forEach(doc => {
+        clearBatch.delete(doc.ref);
+      });
+      await clearBatch.commit();
+      
+      const writeBatch = db.batch();
+      const colData = backup.data[col];
+      let count = 0;
+      for (let docId in colData) {
+        const ref = db.collection(col).doc(docId);
+        writeBatch.set(ref, colData[docId]);
+        count++;
+      }
+      if (count > 0) {
+        await writeBatch.commit();
+      }
+    }
+    successHandler({ success: true });
+  } catch (err) {
+    successHandler({ success: false, error: err.toString() });
+  }
 };
 
 const state = {
@@ -169,8 +1183,14 @@ const state = {
       let confirmCallback = null;
 
       document.addEventListener('DOMContentLoaded', function() {
-        const apiUrl = localStorage.getItem('rojnamcha_api_url') || 'https://script.google.com/macros/s/AKfycbx8h0orszwV29cKrVCUbrR-59HzsF1_aCFfuSBRVpQp3VnzI0carkCRWt5M_eb-Ra-DBA/exec';
-        if (isStandalone && !apiUrl) {
+        const currentDbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
+        let isConfigured = false;
+        if (currentDbMode === 'firebase') {
+          isConfigured = !!localStorage.getItem('rojnamcha_firebase_config');
+        } else {
+          isConfigured = !!localStorage.getItem('rojnamcha_api_url');
+        }
+        if (isStandalone && !isConfigured) {
           showApiConfigScreen();
         } else {
           checkSession();
@@ -187,8 +1207,14 @@ const state = {
       });
 
       function checkSession() {
-        const apiUrl = localStorage.getItem('rojnamcha_api_url') || 'https://script.google.com/macros/s/AKfycbx8h0orszwV29cKrVCUbrR-59HzsF1_aCFfuSBRVpQp3VnzI0carkCRWt5M_eb-Ra-DBA/exec';
-        if (isStandalone && !apiUrl) {
+        const currentDbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
+        let isConfigured = false;
+        if (currentDbMode === 'firebase') {
+          isConfigured = !!localStorage.getItem('rojnamcha_firebase_config');
+        } else {
+          isConfigured = !!localStorage.getItem('rojnamcha_api_url');
+        }
+        if (isStandalone && !isConfigured) {
           showApiConfigScreen();
           return;
         }
@@ -301,9 +1327,14 @@ const state = {
           }
         }
 
-        if (window.INITIAL_DATA) {
+        const currentDbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
+        if (window.INITIAL_DATA && currentDbMode === 'sheets') {
           handleInitData(window.INITIAL_DATA);
         } else {
+          if (currentDbMode === 'firebase') {
+            const initialized = initDatabaseConnection();
+            if (!initialized) return;
+          }
           // Single optimized startup call for all initial data
           showLoading(true, 'Initializing Rojnamcha application...');
           google.script.run
