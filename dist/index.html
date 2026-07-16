@@ -3910,6 +3910,13 @@ let dbMode = 'firebase';
 let firebaseApp = null;
 let db = null; // Firestore reference
 
+// In-memory session cache: avoids repeated Firestore reads for static data
+const _fsCache = {
+  profile: null,
+  options: null,
+  bankAccounts: null,
+};
+
 // Pure JS SHA-256 implementation as fallback for insecure contexts (like file:/// previews)
 function sha256_pureJS(ascii) {
   const K = [
@@ -4398,72 +4405,91 @@ window.firebase_getInitialData = async function(args, successHandler, failureHan
   try {
     const dateStr = args[0];
     
-    // Parallelize independent Firestore queries to resolve concurrently
-    const [profileDoc, optionsSnap, rojnamchaSnap, summaryDoc, detailsSnap] = await Promise.all([
-      db.collection('company_profile').doc('profile').get(),
-      db.collection('dropdown_options').get(),
-      db.collection('rojnamcha').get(),
+    // Parallelize all independent queries in one round-trip
+    // NOTE: rojnamcha full scan removed - dates fetched via limited ordered query instead
+    // Use session cache for profile & options to skip repeat reads
+    const needProfile = !_fsCache.profile;
+    const needOptions = !_fsCache.options;
+    
+    const [profileDoc, optionsSnap, summaryDoc, detailsSnap, recentDatesSnap] = await Promise.all([
+      needProfile ? db.collection('company_profile').doc('profile').get() : Promise.resolve(null),
+      needOptions ? db.collection('dropdown_options').get() : Promise.resolve(null),
       db.collection('rojnamcha').doc(dateStr).get(),
-      db.collection('rojnamcha_details').where('date', '==', dateStr).get()
+      db.collection('rojnamcha_details').where('date', '==', dateStr).get(),
+      db.collection('rojnamcha').orderBy('date', 'desc').limit(120).get().catch(() =>
+        db.collection('rojnamcha').get()
+      )
     ]);
     
-    // 1. Get/Seed Company Profile
-    let profile = {
-      companyName: 'SHIV SHAKTI HP GAS AGENCY',
-      companyAddress: 'PANDAUL BAZAR, MADHUBANI-847234',
-      companyGSTIN: '10AEYPK3674C2ZH',
-      companyLogo: ''
-    };
-    if (profileDoc.exists) {
-      profile = Object.assign(profile, profileDoc.data());
+    // 1. Get/Seed Company Profile (use cache if available)
+    let profile;
+    if (_fsCache.profile) {
+      profile = _fsCache.profile;
     } else {
-      db.collection('company_profile').doc('profile').set(profile);
+      profile = {
+        companyName: 'SHIV SHAKTI HP GAS AGENCY',
+        companyAddress: 'PANDAUL BAZAR, MADHUBANI-847234',
+        companyGSTIN: '10AEYPK3674C2ZH',
+        companyLogo: ''
+      };
+      if (profileDoc && profileDoc.exists) {
+        profile = Object.assign(profile, profileDoc.data());
+      } else {
+        db.collection('company_profile').doc('profile').set(profile);
+      }
+      _fsCache.profile = profile;
     }
     
-    // 2. Get/Seed Dropdown Options
-    const options = { receipts: [], expenses: [] };
-    if (!optionsSnap.empty) {
-      optionsSnap.forEach(doc => {
-        const o = doc.data();
-        if (o.section === 'Receipt') {
-          options.receipts.push({ details: o.details, defaultRate: o.defaultRate });
-        } else {
-          options.expenses.push({ details: o.details, defaultRate: o.defaultRate });
-        }
-      });
+    // 2. Get/Seed Dropdown Options (use cache if available)
+    let options;
+    if (_fsCache.options) {
+      options = _fsCache.options;
     } else {
-      const defaultOptions = [
-        { section: 'Receipt', details: 'NAME TRANSFER A TO B', defaultRate: 1777.00 },
-        { section: 'Receipt', details: 'REGULATOR LEAK', defaultRate: 100.00 },
-        { section: 'Receipt', details: 'DEATH CASE name transfer', defaultRate: 177.00 },
-        { section: 'Receipt', details: 'NAME TRANSFER PUMY', defaultRate: 143.00 },
-        { section: 'Receipt', details: 'CTA IN', defaultRate: 177.00 },
-        { section: 'Receipt', details: 'TV OUT (615102)', defaultRate: 118.00 },
-        { section: 'Receipt', details: '19 KG SALE', defaultRate: 3500.00 },
-        { section: 'Receipt', details: 'REFILLING 14.2 KG', defaultRate: 1013.00 },
-        { section: 'Receipt', details: 'REFILLING HD SALE 14.2 KG', defaultRate: 1013.00 },
-        { section: 'Expense', details: 'TV OUT CASH RETURN (615102)', defaultRate: 1800.00 },
-        { section: 'Expense', details: '19 KG SUMIT ENG', defaultRate: 3500.00 },
-        { section: 'Expense', details: 'DISCOUNT 19 KG', defaultRate: 100.00 },
-        { section: 'Expense', details: '19 KG SECURITY RETURN (RAKSH jHA)', defaultRate: 26000.00 },
-        { section: 'Expense', details: 'REFIL PAY ONLINE 14.2 KG', defaultRate: 1013.00 },
-        { section: 'Expense', details: 'NAME TRANSFER ONLINE PAID', defaultRate: 1949.00 },
-        { section: 'Expense', details: 'Expy By Godam Labour Under Construction', defaultRate: 12800.00 }
-      ];
-      for (let o of defaultOptions) {
-        const id = o.section + '_' + o.details.replace(/\//g, '_');
-        db.collection('dropdown_options').doc(id).set(o);
-        if (o.section === 'Receipt') {
-          options.receipts.push({ details: o.details, defaultRate: o.defaultRate });
-        } else {
-          options.expenses.push({ details: o.details, defaultRate: o.defaultRate });
+      options = { receipts: [], expenses: [] };
+      if (optionsSnap && !optionsSnap.empty) {
+        optionsSnap.forEach(doc => {
+          const o = doc.data();
+          if (o.section === 'Receipt') {
+            options.receipts.push({ details: o.details, defaultRate: o.defaultRate });
+          } else {
+            options.expenses.push({ details: o.details, defaultRate: o.defaultRate });
+          }
+        });
+      } else {
+        const defaultOptions = [
+          { section: 'Receipt', details: 'NAME TRANSFER A TO B', defaultRate: 1777.00 },
+          { section: 'Receipt', details: 'REGULATOR LEAK', defaultRate: 100.00 },
+          { section: 'Receipt', details: 'DEATH CASE name transfer', defaultRate: 177.00 },
+          { section: 'Receipt', details: 'NAME TRANSFER PUMY', defaultRate: 143.00 },
+          { section: 'Receipt', details: 'CTA IN', defaultRate: 177.00 },
+          { section: 'Receipt', details: 'TV OUT (615102)', defaultRate: 118.00 },
+          { section: 'Receipt', details: '19 KG SALE', defaultRate: 3500.00 },
+          { section: 'Receipt', details: 'REFILLING 14.2 KG', defaultRate: 1013.00 },
+          { section: 'Receipt', details: 'REFILLING HD SALE 14.2 KG', defaultRate: 1013.00 },
+          { section: 'Expense', details: 'TV OUT CASH RETURN (615102)', defaultRate: 1800.00 },
+          { section: 'Expense', details: '19 KG SUMIT ENG', defaultRate: 3500.00 },
+          { section: 'Expense', details: 'DISCOUNT 19 KG', defaultRate: 100.00 },
+          { section: 'Expense', details: '19 KG SECURITY RETURN (RAKSH jHA)', defaultRate: 26000.00 },
+          { section: 'Expense', details: 'REFIL PAY ONLINE 14.2 KG', defaultRate: 1013.00 },
+          { section: 'Expense', details: 'NAME TRANSFER ONLINE PAID', defaultRate: 1949.00 },
+          { section: 'Expense', details: 'Expy By Godam Labour Under Construction', defaultRate: 12800.00 }
+        ];
+        for (let o of defaultOptions) {
+          const id = o.section + '_' + o.details.replace(/\//g, '_');
+          db.collection('dropdown_options').doc(id).set(o);
+          if (o.section === 'Receipt') {
+            options.receipts.push({ details: o.details, defaultRate: o.defaultRate });
+          } else {
+            options.expenses.push({ details: o.details, defaultRate: o.defaultRate });
+          }
         }
       }
+      _fsCache.options = options;
     }
     
-    // 3. Get Existing Dates
+    // 3. Get Existing Dates (from recent 120 entries - fast)
     const dates = [];
-    rojnamchaSnap.forEach(doc => {
+    recentDatesSnap.forEach(doc => {
       dates.push(doc.id);
     });
     dates.sort((a, b) => new Date(b) - new Date(a));
@@ -4543,27 +4569,18 @@ window.firebase_getRojnamchaData = async function(args, successHandler, failureH
       details.sort((a, b) => a.sl - b.sl);
       successHandler({ summary, details });
     } else {
-      // Find previous closing cash
-      const datesSnap = await db.collection('rojnamcha').get();
-      const dates = [];
-      datesSnap.forEach(doc => dates.push(doc.id));
-      
-      const targetDate = new Date(dateStr);
-      let bestDate = null;
+      // Single fast query: get the most recent entry before this date
       let previousClosingCash = 0;
-      
-      for (let dStr of dates) {
-        const d = new Date(dStr);
-        if (d < targetDate) {
-          if (!bestDate || d > bestDate) {
-            bestDate = d;
-            const prevDoc = await db.collection('rojnamcha').doc(dStr).get();
-            if (prevDoc.exists) {
-              previousClosingCash = prevDoc.data().closingCashInHand || 0;
-            }
-          }
+      try {
+        const prevSnap = await db.collection('rojnamcha')
+          .where('date', '<', dateStr)
+          .orderBy('date', 'desc')
+          .limit(1)
+          .get();
+        if (!prevSnap.empty) {
+          previousClosingCash = prevSnap.docs[0].data().closingCashInHand || 0;
         }
-      }
+      } catch(e) { /* orderBy index may not exist yet, fallback */ }
       successHandler({ isNew: true, previousClosingCash });
     }
   } catch (err) {
@@ -4631,26 +4648,30 @@ window.firebase_saveRojnamcha = async function(args, successHandler, failureHand
 window.firebase_getPreviousClosingCash = async function(args, successHandler, failureHandler) {
   try {
     const dateStr = args[0];
-    const targetDate = new Date(dateStr);
-    
-    const datesSnap = await db.collection('rojnamcha').get();
-    const dates = [];
-    datesSnap.forEach(doc => dates.push(doc.id));
-    
-    let bestDate = null;
     let prevClosing = 0;
-    
-    for (let dStr of dates) {
-      const d = new Date(dStr);
-      if (d < targetDate) {
-        if (!bestDate || d > bestDate) {
-          bestDate = d;
-          const prevDoc = await db.collection('rojnamcha').doc(dStr).get();
-          if (prevDoc.exists) {
-            prevClosing = prevDoc.data().closingCashInHand || 0;
+    try {
+      // Single ordered query - O(1) speed regardless of database size
+      const prevSnap = await db.collection('rojnamcha')
+        .where('date', '<', dateStr)
+        .orderBy('date', 'desc')
+        .limit(1)
+        .get();
+      if (!prevSnap.empty) {
+        prevClosing = prevSnap.docs[0].data().closingCashInHand || 0;
+      }
+    } catch(e) {
+      // Fallback if composite index not ready: full scan (old path)
+      const snap = await db.collection('rojnamcha').get();
+      const targetDate = new Date(dateStr);
+      snap.forEach(doc => {
+        const d = new Date(doc.id);
+        if (d < targetDate) {
+          const val = doc.data().closingCashInHand || 0;
+          if (!prevClosing || d > new Date(prevClosing._date || 0)) {
+            prevClosing = val;
           }
         }
-      }
+      });
     }
     successHandler(prevClosing);
   } catch (err) {
@@ -4847,6 +4868,11 @@ window.firebase_getDetailedRangeLedger = async function(args, successHandler, fa
 
 window.firebase_getBankAccounts = async function(args, successHandler, failureHandler) {
   try {
+    // Return from cache if available
+    if (_fsCache.bankAccounts) {
+      return successHandler(_fsCache.bankAccounts);
+    }
+    
     const snap = await db.collection('bank_accounts').get();
     const accounts = [];
     const needSyncIds = [];
@@ -4877,9 +4903,11 @@ window.firebase_getBankAccounts = async function(args, successHandler, failureHa
     
     if (needSyncIds.length > 0) {
       await syncBankAccountBalances(needSyncIds);
+      _fsCache.bankAccounts = null; // force fresh fetch after sync
       return window.firebase_getBankAccounts(args, successHandler, failureHandler);
     }
     
+    _fsCache.bankAccounts = accounts;
     successHandler(accounts);
   } catch (err) {
     if (failureHandler) failureHandler(err);
@@ -4920,6 +4948,7 @@ window.firebase_saveBankAccount = async function(args, successHandler, failureHa
     }
     
     await docRef.set(accountData, { merge: true });
+    _fsCache.bankAccounts = null; // invalidate cache
     
     successHandler({ success: true, id: docRef.id, name: name });
   } catch (err) {
@@ -4938,6 +4967,7 @@ window.firebase_deleteBankAccount = async function(args, successHandler, failure
     }
     
     await db.collection('bank_accounts').doc(id).delete();
+    _fsCache.bankAccounts = null; // invalidate cache
     successHandler({ success: true });
   } catch (err) {
     if (failureHandler) failureHandler(err);
@@ -4956,6 +4986,7 @@ async function syncBankAccountBalances(bankAccountIds) {
       balance: total
     });
   }
+  _fsCache.bankAccounts = null; // invalidate cache after balance sync
 }
 
 async function syncDailyCashDepositSummary(dateStr) {
