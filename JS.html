@@ -1233,6 +1233,7 @@ const state = {
           localStorage.setItem('rojnamcha_firebase_config', JSON.stringify(defaultFirebaseConfig, null, 2));
         }
         
+        initDatabaseConnection();
         checkSession();
         
         window.addEventListener('beforeprint', function() {
