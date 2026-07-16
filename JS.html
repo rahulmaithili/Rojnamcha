@@ -3004,8 +3004,10 @@ const state = {
         document.getElementById('btn-email-ledger-daily').addEventListener('click', () => openEmailModal('daily'));
 
         // Sidebar Collapse Toggle
-        document.getElementById('btn-toggle-sidebar').addEventListener('click', toggleSidebar);
-        document.getElementById('btn-toggle-sidebar-inside').addEventListener('click', toggleSidebar);
+        const toggleBtnDesk = document.getElementById('btn-toggle-sidebar');
+        if (toggleBtnDesk) toggleBtnDesk.addEventListener('click', toggleSidebar);
+        const toggleBtnInside = document.getElementById('btn-toggle-sidebar-inside');
+        if (toggleBtnInside) toggleBtnInside.addEventListener('click', toggleSidebar);
         
         // Theme Toggle Button
         const themeBtn = document.getElementById('btn-toggle-theme');
