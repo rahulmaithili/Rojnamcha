@@ -4591,13 +4591,13 @@ const state = {
       document.addEventListener('DOMContentLoaded', function() {
         dbMode = 'firebase';
         localStorage.setItem('rojnamcha_db_mode', 'firebase');
-        const isConfigured = !!localStorage.getItem('rojnamcha_firebase_config');
         
-        if (isStandalone && !isConfigured) {
-          showApiConfigScreen();
-        } else {
-          checkSession();
+        // Auto-configure default if empty
+        if (!localStorage.getItem('rojnamcha_firebase_config')) {
+          localStorage.setItem('rojnamcha_firebase_config', JSON.stringify(defaultFirebaseConfig, null, 2));
         }
+        
+        checkSession();
         
         window.addEventListener('beforeprint', function() {
           document.querySelector('.preview-banner').style.display = 'none';
@@ -4612,12 +4612,12 @@ const state = {
       function checkSession() {
         dbMode = 'firebase';
         localStorage.setItem('rojnamcha_db_mode', 'firebase');
-        const isConfigured = !!localStorage.getItem('rojnamcha_firebase_config');
         
-        if (isStandalone && !isConfigured) {
-          showApiConfigScreen();
-          return;
+        // Auto-configure default if empty
+        if (!localStorage.getItem('rojnamcha_firebase_config')) {
+          localStorage.setItem('rojnamcha_firebase_config', JSON.stringify(defaultFirebaseConfig, null, 2));
         }
+        
         const session = JSON.parse(localStorage.getItem('rojnamcha_session') || 'null');
         if (session && session.username && session.passwordHash) {
           showLoading(true, 'Verifying session...');
