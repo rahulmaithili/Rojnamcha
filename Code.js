@@ -1348,6 +1348,81 @@ function adminResetPassword(callerUsername, callerPasswordHash, targetUsername, 
 }
 
 /**
+ * Fetches daily bank deposit logs and aggregates total balances for the Bank Ledger view
+ */
+function getBankLedgerData(startDateStr, endDateStr) {
+  initializeDatabase();
+  
+  var startDate = new Date(startDateStr);
+  var endDate = new Date(endDateStr);
+  startDate.setHours(0,0,0,0);
+  endDate.setHours(23,59,59,999);
+  
+  var totalAllTime = 0;
+  var totalRange = 0;
+  var rangeRecords = [];
+  var tz = Session.getScriptTimeZone();
+  
+  var masterSs = SpreadsheetApp.getActiveSpreadsheet();
+  
+  function processSheet(rSheet) {
+    if (!rSheet) return;
+    var rData  = rSheet.getDataRange().getValues();
+    var colMap = getHeaderMapping(rSheet);
+    var dateIdx    = colMap['Date']               !== undefined ? colMap['Date']               : 0;
+    var bankIdx    = colMap['CashDepositToBank']   !== undefined ? colMap['CashDepositToBank']   : 5;
+    var bankNoteIdx= colMap['CashDepositToBankNote']!==undefined ? colMap['CashDepositToBankNote']: 9;
+    
+    for (var i = 1; i < rData.length; i++) {
+      var rawDate = rData[i][dateIdx];
+      if (!rawDate) continue;
+      var fd = rawDate instanceof Date ? Utilities.formatDate(rawDate, tz, 'yyyy-MM-dd') : rawDate.toString();
+      var deposit = parseFloat(rData[i][bankIdx]) || 0;
+      var note = rData[i][bankNoteIdx] || '-';
+      
+      if (deposit > 0) {
+        totalAllTime += deposit;
+        
+        var dateVal = new Date(fd);
+        dateVal.setHours(12,0,0,0);
+        if (dateVal >= startDate && dateVal <= endDate) {
+          totalRange += deposit;
+          rangeRecords.push({
+            date: fd,
+            amount: deposit,
+            note: note
+          });
+        }
+      }
+    }
+  }
+  
+  processSheet(masterSs.getSheetByName('Rojnamcha'));
+  
+  var props = PropertiesService.getScriptProperties();
+  var allProps = props.getProperties();
+  for (var key in allProps) {
+    if (key.indexOf("SS_YEAR_") === 0) {
+      var ssId = allProps[key];
+      try {
+        var ssYear = SpreadsheetApp.openById(ssId);
+        processSheet(ssYear.getSheetByName('Rojnamcha'));
+      } catch (e) {}
+    }
+  }
+  
+  rangeRecords.sort(function(a, b) {
+    return new Date(a.date) - new Date(b.date);
+  });
+  
+  return {
+    totalAllTime: totalAllTime,
+    totalRange: totalRange,
+    records: rangeRecords
+  };
+}
+
+/**
  * Fetches summary records and online payment details for the audit report
  */
 function getRangeAuditData(startDateStr, endDateStr) {
@@ -1823,7 +1898,7 @@ function doPost(e) {
       'loginUser', 'registerUser', 'requestPasswordReset', 'validateSession',
       'getInitialData', 'getRojnamchaData', 'saveRojnamcha', 'getPreviousClosingCash',
       'getDropdownOptions', 'saveDropdownOption', 'deleteDropdownOption', 'updateDropdownOption',
-      'getExistingDates', 'getRangeReport', 'getDetailedRangeLedger', 'getRangeAuditData',
+      'getExistingDates', 'getRangeReport', 'getDetailedRangeLedger', 'getRangeAuditData', 'getBankLedgerData',
       'getCompanyProfile', 'saveCompanyProfile', 'sendLedgerEmail',
       'adminGetUserList', 'adminAddUser', 'adminUpdateUser', 'adminDeleteUser', 'adminResetPassword',
       'exportAllDataJSON', 'importAllDataJSON'

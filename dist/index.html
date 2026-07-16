@@ -1312,6 +1312,7 @@
         .preview-banner,
         aside.sidebar,
         .footer-action-bar,
+        #bank-filter-card,
         .btn-manage-dropdowns,
         .toast-container,
         .modal-overlay,
@@ -2182,6 +2183,10 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
               User Management
             </button>
+            <button type="button" class="sidebar-tab" id="tab-bank-ledger" style="text-align: left; width: 100%; padding: 0.625rem 0.75rem; border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.85rem; border-radius: 0.375rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.75rem;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+              Bank Account
+            </button>
           </div>
           
           <!-- Daily Entry Controls -->
@@ -2244,6 +2249,13 @@
           <div id="sidebar-users-controls" style="display: none;">
             <div class="date-selector-card" style="background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.1);">
               <span style="font-size: 0.85rem; color: #94a3b8; line-height: 1.5; display: block; text-align: center;">Approve new registrants, create administrative or staff users, update roles, and manage system access credentials.</span>
+            </div>
+          </div>
+          
+          <!-- Bank Ledger Navigation Controls -->
+          <div id="sidebar-bank-controls" style="display: none;">
+            <div class="date-selector-card" style="background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.1);">
+              <span style="font-size: 0.85rem; color: #94a3b8; line-height: 1.5; display: block; text-align: center;">Monitor daily cash deposits to your bank account, calculate current ledger balance, and extract custom date-range deposit logs.</span>
             </div>
           </div>
           
@@ -2857,6 +2869,72 @@
               </div>
             </section>
           </div>
+          
+          <!-- Bank Account Ledger View (Hidden by default) -->
+          <div id="bank-ledger-view" style="display: none; flex-direction: column; gap: 2rem;">
+            <!-- Agency Header Card (For printing scope) -->
+            <div class="ledger-section-card" style="padding: 1.5rem;">
+              <div class="section-header-banner" style="background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border-radius: 0.5rem 0.5rem 0 0; margin: -1.5rem -1.5rem 1.5rem -1.5rem; padding: 1rem 1.5rem; font-size: 1rem;">
+                <span style="display:flex;align-items:center;gap:0.5rem;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                  Bank Account Ledger &amp; Statement
+                </span>
+              </div>
+              
+              <!-- Stats Panel -->
+              <div class="dashboard-stats" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 2rem;">
+                <div class="stat-card" style="border-left: 4px solid #0284c7;">
+                  <span class="stat-label">TOTAL DEPOSITS (ALL TIME)</span>
+                  <h2 id="bank-stat-total-alltime" class="stat-val" style="color: #0284c7;">₹ 0.00</h2>
+                </div>
+                <div class="stat-card" style="border-left: 4px solid #059669;">
+                  <span class="stat-label">DEPOSITED IN RANGE</span>
+                  <h2 id="bank-stat-total-range" class="stat-val" style="color: #059669;">₹ 0.00</h2>
+                </div>
+              </div>
+              
+              <!-- Filter Card -->
+              <div id="bank-filter-card" style="background-color: var(--bg-main); padding: 1.25rem; border-radius: 0.5rem; border: 1px dashed var(--border-color); margin-bottom: 1.5rem;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem;">Statement Period</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+                  <div style="flex: 1; min-width: 200px;">
+                    <label for="bank-start-date" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">Start Date</label>
+                    <input type="date" id="bank-start-date" class="table-input" style="height: 38px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+                  </div>
+                  <div style="flex: 1; min-width: 200px;">
+                    <label for="bank-end-date" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">End Date</label>
+                    <input type="date" id="bank-end-date" class="table-input" style="height: 38px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+                  </div>
+                  <button type="button" id="btn-generate-bank-ledger" class="btn-add-option" style="width: auto; height: 38px; padding: 0 1.5rem; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border: none; border-radius: 0.375rem; cursor: pointer; gap: 0.5rem;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    Generate Statement
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Ledger Table -->
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Bank Deposit Logs</div>
+                <span id="bank-record-count" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">0 records</span>
+              </div>
+              <div class="ledger-table-container">
+                <table class="ledger-table" id="bank-ledger-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 150px;">Date</th>
+                      <th style="width: 200px; text-align: right; padding-right: 1.5rem;">Deposited Amount (₹)</th>
+                      <th>Note / Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody id="bank-ledger-tbody">
+                    <tr>
+                      <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 2rem;">No deposit logs loaded. Please select a date range and click Generate Statement.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
         
         <!-- Action Buttons (Daily Ledger Specific) -->
@@ -2890,6 +2968,18 @@
           <button class="footer-btn btn-print" id="btn-email-ledger-range" style="width: auto; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #059669, #10b981); color: white; border: none;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
             Email Range PDF
+          </button>
+        </footer>
+
+        <!-- Action Buttons (Bank Ledger Specific) -->
+        <footer class="footer-action-bar" id="bank-footer-bar" style="display: none; gap: 0.75rem;">
+          <button class="footer-btn btn-print" id="btn-print-bank-ledger" style="width: auto; padding: 0.75rem 1.5rem; background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border: none;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+            Print Statement
+          </button>
+          <button class="footer-btn btn-print" id="btn-export-bank-csv" style="width: auto; padding: 0.75rem 1.5rem; background: #475569; color: white; border: none;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Export CSV
           </button>
         </footer>
       </main>
@@ -4320,6 +4410,54 @@ window.firebase_getDetailedRangeLedger = async function(args, successHandler, fa
     
     result.sort((a, b) => new Date(a.summary.date) - new Date(b.summary.date));
     successHandler(result);
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_getBankLedgerData = async function(args, successHandler, failureHandler) {
+  try {
+    const start = args[0];
+    const end = args[1];
+    
+    // 1. Fetch all documents from 'rojnamcha' to calculate all-time total bank deposits
+    const allSummariesSnap = await db.collection('rojnamcha').get();
+    let totalAllTime = 0;
+    allSummariesSnap.forEach(doc => {
+      const s = doc.data();
+      totalAllTime += parseFloat(s.cashDepositToBank) || 0;
+    });
+    
+    // 2. Fetch range summaries
+    const rangeSummariesSnap = await db.collection('rojnamcha')
+      .where('date', '>=', start)
+      .where('date', '<=', end)
+      .get();
+      
+    const rangeRecords = [];
+    let totalRange = 0;
+    
+    rangeSummariesSnap.forEach(doc => {
+      const s = doc.data();
+      const deposit = parseFloat(s.cashDepositToBank) || 0;
+      if (deposit > 0) {
+        totalRange += deposit;
+        rangeRecords.push({
+          date: s.date,
+          amount: deposit,
+          note: s.cashDepositToBankNote || '-'
+        });
+      }
+    });
+    
+    // Sort range records by date ascending
+    rangeRecords.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    successHandler({
+      totalAllTime: totalAllTime,
+      totalRange: totalRange,
+      records: rangeRecords
+    });
   } catch (err) {
     if (failureHandler) failureHandler(err);
   }
@@ -6107,11 +6245,15 @@ const state = {
           updateThemeUI();
         }
         
-        // Reports range report triggers
         document.getElementById('btn-generate-report').addEventListener('click', generateRangeReport);
         document.getElementById('btn-print-report').addEventListener('click', printRangeReport);
         document.getElementById('btn-print-range-detailed').addEventListener('click', printDetailedRangeLedger);
         document.getElementById('btn-email-ledger-range').addEventListener('click', () => openEmailModal('range'));
+
+        // Bank Ledger triggers
+        document.getElementById('btn-generate-bank-ledger').addEventListener('click', generateBankLedger);
+        document.getElementById('btn-print-bank-ledger').addEventListener('click', printBankLedger);
+        document.getElementById('btn-export-bank-csv').addEventListener('click', exportBankLedgerCSV);
 
         // Audit tab event listeners
         document.getElementById('btn-generate-audit').addEventListener('click', generateAuditReport);
@@ -6282,31 +6424,35 @@ const state = {
         const tabAudit = document.getElementById('tab-audit');
         const tabDropdowns = document.getElementById('tab-dropdowns');
         const tabUsers = document.getElementById('tab-users');
+        const tabBankLedger = document.getElementById('tab-bank-ledger');
         
         const dailyView = document.getElementById('daily-workspace-view');
         const reportsView = document.getElementById('reports-workspace-view');
         const auditView = document.getElementById('audit-workspace-view');
         const dropdownsView = document.getElementById('dropdowns-workspace-view');
         const usersView = document.getElementById('users-workspace-view');
+        const bankLedgerView = document.getElementById('bank-ledger-view');
         
         const dailyControls = document.getElementById('sidebar-daily-controls');
         const reportsControls = document.getElementById('sidebar-reports-controls');
         const auditControls = document.getElementById('sidebar-audit-controls');
         const dropdownsControls = document.getElementById('sidebar-dropdowns-controls');
         const usersControls = document.getElementById('sidebar-users-controls');
+        const bankLedgerControls = document.getElementById('sidebar-bank-controls');
         
         const dailyFooter = document.getElementById('daily-footer-bar');
         const reportsFooter = document.getElementById('reports-footer-bar');
+        const bankFooter = document.getElementById('bank-footer-bar');
         
         const dateLabel = document.getElementById('display-date-label');
         const dateDisplay = document.getElementById('display-date');
 
         function switchTab(active) {
           // Reset all
-          [tabDaily, tabReports, tabAudit, tabDropdowns, tabUsers].forEach(t => { if (t) t.classList.remove('active'); });
-          [dailyView, reportsView, auditView, dropdownsView, usersView].forEach(v => { if (v) v.style.display = 'none'; });
-          [dailyControls, reportsControls, auditControls, dropdownsControls, usersControls].forEach(c => { if (c) c.style.display = 'none'; });
-          [dailyFooter, reportsFooter].forEach(f => { if (f) f.style.display = 'none'; });
+          [tabDaily, tabReports, tabAudit, tabDropdowns, tabUsers, tabBankLedger].forEach(t => { if (t) t.classList.remove('active'); });
+          [dailyView, reportsView, auditView, dropdownsView, usersView, bankLedgerView].forEach(v => { if (v) v.style.display = 'none'; });
+          [dailyControls, reportsControls, auditControls, dropdownsControls, usersControls, bankLedgerControls].forEach(c => { if (c) c.style.display = 'none'; });
+          [dailyFooter, reportsFooter, bankFooter].forEach(f => { if (f) f.style.display = 'none'; });
           active.classList.add('active');
         }
         
@@ -6387,8 +6533,148 @@ const state = {
           });
         }
         
+        if (tabBankLedger) {
+          tabBankLedger.addEventListener('click', function() {
+            switchTab(tabBankLedger);
+            bankLedgerView.style.display = 'flex';
+            bankLedgerControls.style.display = 'block';
+            bankFooter.style.display = 'flex';
+            dateLabel.innerText = 'BANK SCOPE';
+            updateBankDateRangeLabel();
+            
+            const startInput = document.getElementById('bank-start-date');
+            const endInput = document.getElementById('bank-end-date');
+            if (!startInput.value || !endInput.value) {
+              const today = new Date();
+              const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+              startInput.value = firstDay.toISOString().split('T')[0];
+              endInput.value = today.toISOString().split('T')[0];
+              updateBankDateRangeLabel();
+            }
+            generateBankLedger();
+          });
+        }
+        
         // Initialize active tab state explicitly
         if (tabDaily) tabDaily.click();
+      }
+
+      // Bank Account Ledger Functions
+      function updateBankDateRangeLabel() {
+        const startVal = document.getElementById('bank-start-date').value;
+        const endVal = document.getElementById('bank-end-date').value;
+        const dateDisplay = document.getElementById('display-date');
+        if (startVal && endVal) {
+          dateDisplay.innerText = `${formatDateReadable(startVal)} to ${formatDateReadable(endVal)}`;
+        } else {
+          dateDisplay.innerText = 'No Range Selected';
+        }
+      }
+
+      function generateBankLedger() {
+        const startDate = document.getElementById('bank-start-date').value;
+        const endDate = document.getElementById('bank-end-date').value;
+        
+        if (!startDate || !endDate) {
+          showToast('Please select both Start and End dates', 'error');
+          return;
+        }
+        
+        if (new Date(startDate) > new Date(endDate)) {
+          showToast('Start Date cannot be after End Date', 'error');
+          return;
+        }
+        
+        showLoading(true, 'Generating bank statement...');
+        google.script.run
+          .withSuccessHandler(function(res) {
+            showLoading(false);
+            renderBankLedger(res);
+            updateBankDateRangeLabel();
+            showToast(`Bank statement compiled successfully with ${res.records.length} deposits.`, 'success');
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to compile bank report: ' + err.message, 'error');
+          })
+          .getBankLedgerData(startDate, endDate);
+      }
+
+      let activeBankLedgerData = null;
+      function renderBankLedger(res) {
+        activeBankLedgerData = res;
+        
+        document.getElementById('bank-stat-total-alltime').innerText = formatCurrency(res.totalAllTime);
+        document.getElementById('bank-stat-total-range').innerText = formatCurrency(res.totalRange);
+        
+        const countEl = document.getElementById('bank-record-count');
+        if (countEl) {
+          countEl.innerText = res.records.length + ' deposit' + (res.records.length !== 1 ? 's' : '');
+        }
+        
+        const tbody = document.getElementById('bank-ledger-tbody');
+        tbody.innerHTML = '';
+        
+        if (res.records.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 2rem;">No deposit logs found within the selected date range.</td>
+            </tr>
+          `;
+          return;
+        }
+        
+        res.records.forEach(row => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${formatDateReadable(row.date)}</td>
+            <td style="text-align: right; padding-right: 1.5rem; font-weight: 700; color: #0284c7;">${formatCurrency(row.amount)}</td>
+            <td style="color: var(--text-dark);">${row.note || '-'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      function exportBankLedgerCSV() {
+        if (!activeBankLedgerData || activeBankLedgerData.records.length === 0) {
+          showToast('No bank data available to export. Please generate a statement first.', 'error');
+          return;
+        }
+        
+        const start = document.getElementById('bank-start-date').value;
+        const end = document.getElementById('bank-end-date').value;
+        
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "Date,Deposited Amount (INR),Notes / Remarks\r\n";
+        
+        activeBankLedgerData.records.forEach(row => {
+          const cleanNote = (row.note || '').replace(/"/g, '""');
+          csvContent += `"${row.date}",${row.amount},"${cleanNote}"\r\n`;
+        });
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `Bank_Statement_${start}_to_${end}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast('CSV Exported successfully!', 'success');
+      }
+
+      function printBankLedger() {
+        const sidebar = document.getElementById('app-sidebar');
+        const wasCollapsed = sidebar.classList.contains('collapsed');
+        
+        if (!wasCollapsed) {
+          sidebar.classList.add('collapsed');
+        }
+        
+        window.print();
+        
+        if (!wasCollapsed) {
+          setTimeout(() => sidebar.classList.remove('collapsed'), 600);
+        }
       }
 
       // Update Range Label

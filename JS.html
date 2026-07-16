@@ -953,6 +953,54 @@ window.firebase_getDetailedRangeLedger = async function(args, successHandler, fa
   }
 };
 
+window.firebase_getBankLedgerData = async function(args, successHandler, failureHandler) {
+  try {
+    const start = args[0];
+    const end = args[1];
+    
+    // 1. Fetch all documents from 'rojnamcha' to calculate all-time total bank deposits
+    const allSummariesSnap = await db.collection('rojnamcha').get();
+    let totalAllTime = 0;
+    allSummariesSnap.forEach(doc => {
+      const s = doc.data();
+      totalAllTime += parseFloat(s.cashDepositToBank) || 0;
+    });
+    
+    // 2. Fetch range summaries
+    const rangeSummariesSnap = await db.collection('rojnamcha')
+      .where('date', '>=', start)
+      .where('date', '<=', end)
+      .get();
+      
+    const rangeRecords = [];
+    let totalRange = 0;
+    
+    rangeSummariesSnap.forEach(doc => {
+      const s = doc.data();
+      const deposit = parseFloat(s.cashDepositToBank) || 0;
+      if (deposit > 0) {
+        totalRange += deposit;
+        rangeRecords.push({
+          date: s.date,
+          amount: deposit,
+          note: s.cashDepositToBankNote || '-'
+        });
+      }
+    });
+    
+    // Sort range records by date ascending
+    rangeRecords.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    successHandler({
+      totalAllTime: totalAllTime,
+      totalRange: totalRange,
+      records: rangeRecords
+    });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
 window.firebase_getRangeAuditData = async function(args, successHandler, failureHandler) {
   try {
     const start = args[0];
@@ -2735,11 +2783,15 @@ const state = {
           updateThemeUI();
         }
         
-        // Reports range report triggers
         document.getElementById('btn-generate-report').addEventListener('click', generateRangeReport);
         document.getElementById('btn-print-report').addEventListener('click', printRangeReport);
         document.getElementById('btn-print-range-detailed').addEventListener('click', printDetailedRangeLedger);
         document.getElementById('btn-email-ledger-range').addEventListener('click', () => openEmailModal('range'));
+
+        // Bank Ledger triggers
+        document.getElementById('btn-generate-bank-ledger').addEventListener('click', generateBankLedger);
+        document.getElementById('btn-print-bank-ledger').addEventListener('click', printBankLedger);
+        document.getElementById('btn-export-bank-csv').addEventListener('click', exportBankLedgerCSV);
 
         // Audit tab event listeners
         document.getElementById('btn-generate-audit').addEventListener('click', generateAuditReport);
@@ -2910,31 +2962,35 @@ const state = {
         const tabAudit = document.getElementById('tab-audit');
         const tabDropdowns = document.getElementById('tab-dropdowns');
         const tabUsers = document.getElementById('tab-users');
+        const tabBankLedger = document.getElementById('tab-bank-ledger');
         
         const dailyView = document.getElementById('daily-workspace-view');
         const reportsView = document.getElementById('reports-workspace-view');
         const auditView = document.getElementById('audit-workspace-view');
         const dropdownsView = document.getElementById('dropdowns-workspace-view');
         const usersView = document.getElementById('users-workspace-view');
+        const bankLedgerView = document.getElementById('bank-ledger-view');
         
         const dailyControls = document.getElementById('sidebar-daily-controls');
         const reportsControls = document.getElementById('sidebar-reports-controls');
         const auditControls = document.getElementById('sidebar-audit-controls');
         const dropdownsControls = document.getElementById('sidebar-dropdowns-controls');
         const usersControls = document.getElementById('sidebar-users-controls');
+        const bankLedgerControls = document.getElementById('sidebar-bank-controls');
         
         const dailyFooter = document.getElementById('daily-footer-bar');
         const reportsFooter = document.getElementById('reports-footer-bar');
+        const bankFooter = document.getElementById('bank-footer-bar');
         
         const dateLabel = document.getElementById('display-date-label');
         const dateDisplay = document.getElementById('display-date');
 
         function switchTab(active) {
           // Reset all
-          [tabDaily, tabReports, tabAudit, tabDropdowns, tabUsers].forEach(t => { if (t) t.classList.remove('active'); });
-          [dailyView, reportsView, auditView, dropdownsView, usersView].forEach(v => { if (v) v.style.display = 'none'; });
-          [dailyControls, reportsControls, auditControls, dropdownsControls, usersControls].forEach(c => { if (c) c.style.display = 'none'; });
-          [dailyFooter, reportsFooter].forEach(f => { if (f) f.style.display = 'none'; });
+          [tabDaily, tabReports, tabAudit, tabDropdowns, tabUsers, tabBankLedger].forEach(t => { if (t) t.classList.remove('active'); });
+          [dailyView, reportsView, auditView, dropdownsView, usersView, bankLedgerView].forEach(v => { if (v) v.style.display = 'none'; });
+          [dailyControls, reportsControls, auditControls, dropdownsControls, usersControls, bankLedgerControls].forEach(c => { if (c) c.style.display = 'none'; });
+          [dailyFooter, reportsFooter, bankFooter].forEach(f => { if (f) f.style.display = 'none'; });
           active.classList.add('active');
         }
         
@@ -3015,8 +3071,148 @@ const state = {
           });
         }
         
+        if (tabBankLedger) {
+          tabBankLedger.addEventListener('click', function() {
+            switchTab(tabBankLedger);
+            bankLedgerView.style.display = 'flex';
+            bankLedgerControls.style.display = 'block';
+            bankFooter.style.display = 'flex';
+            dateLabel.innerText = 'BANK SCOPE';
+            updateBankDateRangeLabel();
+            
+            const startInput = document.getElementById('bank-start-date');
+            const endInput = document.getElementById('bank-end-date');
+            if (!startInput.value || !endInput.value) {
+              const today = new Date();
+              const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+              startInput.value = firstDay.toISOString().split('T')[0];
+              endInput.value = today.toISOString().split('T')[0];
+              updateBankDateRangeLabel();
+            }
+            generateBankLedger();
+          });
+        }
+        
         // Initialize active tab state explicitly
         if (tabDaily) tabDaily.click();
+      }
+
+      // Bank Account Ledger Functions
+      function updateBankDateRangeLabel() {
+        const startVal = document.getElementById('bank-start-date').value;
+        const endVal = document.getElementById('bank-end-date').value;
+        const dateDisplay = document.getElementById('display-date');
+        if (startVal && endVal) {
+          dateDisplay.innerText = `${formatDateReadable(startVal)} to ${formatDateReadable(endVal)}`;
+        } else {
+          dateDisplay.innerText = 'No Range Selected';
+        }
+      }
+
+      function generateBankLedger() {
+        const startDate = document.getElementById('bank-start-date').value;
+        const endDate = document.getElementById('bank-end-date').value;
+        
+        if (!startDate || !endDate) {
+          showToast('Please select both Start and End dates', 'error');
+          return;
+        }
+        
+        if (new Date(startDate) > new Date(endDate)) {
+          showToast('Start Date cannot be after End Date', 'error');
+          return;
+        }
+        
+        showLoading(true, 'Generating bank statement...');
+        google.script.run
+          .withSuccessHandler(function(res) {
+            showLoading(false);
+            renderBankLedger(res);
+            updateBankDateRangeLabel();
+            showToast(`Bank statement compiled successfully with ${res.records.length} deposits.`, 'success');
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to compile bank report: ' + err.message, 'error');
+          })
+          .getBankLedgerData(startDate, endDate);
+      }
+
+      let activeBankLedgerData = null;
+      function renderBankLedger(res) {
+        activeBankLedgerData = res;
+        
+        document.getElementById('bank-stat-total-alltime').innerText = formatCurrency(res.totalAllTime);
+        document.getElementById('bank-stat-total-range').innerText = formatCurrency(res.totalRange);
+        
+        const countEl = document.getElementById('bank-record-count');
+        if (countEl) {
+          countEl.innerText = res.records.length + ' deposit' + (res.records.length !== 1 ? 's' : '');
+        }
+        
+        const tbody = document.getElementById('bank-ledger-tbody');
+        tbody.innerHTML = '';
+        
+        if (res.records.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 2rem;">No deposit logs found within the selected date range.</td>
+            </tr>
+          `;
+          return;
+        }
+        
+        res.records.forEach(row => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${formatDateReadable(row.date)}</td>
+            <td style="text-align: right; padding-right: 1.5rem; font-weight: 700; color: #0284c7;">${formatCurrency(row.amount)}</td>
+            <td style="color: var(--text-dark);">${row.note || '-'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      function exportBankLedgerCSV() {
+        if (!activeBankLedgerData || activeBankLedgerData.records.length === 0) {
+          showToast('No bank data available to export. Please generate a statement first.', 'error');
+          return;
+        }
+        
+        const start = document.getElementById('bank-start-date').value;
+        const end = document.getElementById('bank-end-date').value;
+        
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "Date,Deposited Amount (INR),Notes / Remarks\r\n";
+        
+        activeBankLedgerData.records.forEach(row => {
+          const cleanNote = (row.note || '').replace(/"/g, '""');
+          csvContent += `"${row.date}",${row.amount},"${cleanNote}"\r\n`;
+        });
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `Bank_Statement_${start}_to_${end}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast('CSV Exported successfully!', 'success');
+      }
+
+      function printBankLedger() {
+        const sidebar = document.getElementById('app-sidebar');
+        const wasCollapsed = sidebar.classList.contains('collapsed');
+        
+        if (!wasCollapsed) {
+          sidebar.classList.add('collapsed');
+        }
+        
+        window.print();
+        
+        if (!wasCollapsed) {
+          setTimeout(() => sidebar.classList.remove('collapsed'), 600);
+        }
       }
 
       // Update Range Label
