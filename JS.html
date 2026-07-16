@@ -901,6 +901,58 @@ window.firebase_getRangeReport = async function(args, successHandler, failureHan
   }
 };
 
+window.firebase_getDetailedRangeLedger = async function(args, successHandler, failureHandler) {
+  try {
+    const start = args[0];
+    const end = args[1];
+    
+    const summariesSnap = await db.collection('rojnamcha')
+      .where('date', '>=', start)
+      .where('date', '<=', end)
+      .get();
+      
+    const summaries = [];
+    summariesSnap.forEach(doc => {
+      summaries.push(doc.data());
+    });
+    
+    const detailsSnap = await db.collection('rojnamcha_details')
+      .where('date', '>=', start)
+      .where('date', '<=', end)
+      .get();
+      
+    const detailsByDate = {};
+    detailsSnap.forEach(doc => {
+      const d = doc.data();
+      if (!detailsByDate[d.date]) {
+        detailsByDate[d.date] = [];
+      }
+      detailsByDate[d.date].push(d);
+    });
+    
+    const result = [];
+    for (let s of summaries) {
+      const dayDetails = detailsByDate[s.date] || [];
+      dayDetails.sort((a, b) => {
+        if (a.section !== b.section) {
+          return a.section === 'Receipt' ? -1 : 1;
+        }
+        return (a.sl || 0) - (b.sl || 0);
+      });
+      
+      result.push({
+        summary: s,
+        details: dayDetails
+      });
+    }
+    
+    result.sort((a, b) => new Date(a.summary.date) - new Date(b.summary.date));
+    successHandler(result);
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
 window.firebase_getRangeAuditData = async function(args, successHandler, failureHandler) {
   try {
     const start = args[0];
@@ -1295,22 +1347,29 @@ window.firebase_importAllDataJSON = async function(args, successHandler, failure
     }
     
     for (let col in collectionsToImport) {
+      // 1. Clear existing collection in chunks of 400
       const snap = await db.collection(col).get();
-      const clearBatch = db.batch();
-      snap.forEach(doc => {
-        clearBatch.delete(doc.ref);
-      });
-      await clearBatch.commit();
+      const docs = [];
+      snap.forEach(doc => docs.push(doc.ref));
       
-      const writeBatch = db.batch();
-      const colData = collectionsToImport[col];
-      let count = 0;
-      for (let docId in colData) {
-        const ref = db.collection(col).doc(docId);
-        writeBatch.set(ref, colData[docId]);
-        count++;
+      for (let i = 0; i < docs.length; i += 400) {
+        const clearBatch = db.batch();
+        const chunk = docs.slice(i, i + 400);
+        chunk.forEach(ref => clearBatch.delete(ref));
+        await clearBatch.commit();
       }
-      if (count > 0) {
+      
+      // 2. Write new collection data in chunks of 400
+      const colData = collectionsToImport[col];
+      const keys = Object.keys(colData);
+      
+      for (let i = 0; i < keys.length; i += 400) {
+        const writeBatch = db.batch();
+        const chunkKeys = keys.slice(i, i + 400);
+        chunkKeys.forEach(docId => {
+          const ref = db.collection(col).doc(docId);
+          writeBatch.set(ref, colData[docId]);
+        });
         await writeBatch.commit();
       }
     }
