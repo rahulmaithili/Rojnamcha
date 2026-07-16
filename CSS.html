@@ -139,11 +139,66 @@
       }
 
       aside.sidebar.collapsed {
-        width: 0;
-        padding-left: 0;
-        padding-right: 0;
-        opacity: 0;
-        border-right: none;
+        width: 76px;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        opacity: 1;
+      }
+
+      aside.sidebar.collapsed .sidebar-content {
+        width: 60px;
+        align-items: center;
+      }
+
+      aside.sidebar.collapsed .sidebar-header,
+      aside.sidebar.collapsed .user-profile-info,
+      aside.sidebar.collapsed .btn-logout,
+      aside.sidebar.collapsed #sidebar-daily-controls,
+      aside.sidebar.collapsed #sidebar-reports-controls,
+      aside.sidebar.collapsed #sidebar-audit-controls,
+      aside.sidebar.collapsed #sidebar-dropdowns-controls,
+      aside.sidebar.collapsed #sidebar-users-controls,
+      aside.sidebar.collapsed #sidebar-bank-controls,
+      aside.sidebar.collapsed .sidebar-tab-text,
+      aside.sidebar.collapsed .btn-db-settings-text {
+        display: none !important;
+      }
+
+      aside.sidebar.collapsed .sidebar-tabs {
+        width: 100%;
+        align-items: center;
+        border: none;
+        background: transparent;
+        padding: 0;
+      }
+
+      aside.sidebar.collapsed .sidebar-tab {
+        justify-content: center;
+        padding: 0.625rem 0;
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        gap: 0 !important;
+      }
+
+      aside.sidebar.collapsed .user-profile-widget {
+        justify-content: center;
+        border: none;
+        background: transparent;
+        padding: 0;
+        margin-bottom: 1.5rem;
+      }
+
+      aside.sidebar.collapsed .sidebar-footer-controls {
+        padding-top: 0.5rem;
+        border-top: none;
+      }
+
+      aside.sidebar.collapsed #btn-sidebar-db-config {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        padding: 0;
       }
 
       .sidebar-content {
@@ -182,6 +237,28 @@
         background-color: #f1f5f9 !important;
         border-color: #94a3b8 !important;
         color: var(--primary-color) !important;
+      }
+
+      /* Internal Sidebar Toggle styles */
+      .sidebar-toggle-inside-container {
+        display: flex;
+        justify-content: flex-end;
+        padding: 0 0.5rem;
+        margin-bottom: 1rem;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .btn-toggle-sidebar-inside:hover {
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        border-color: rgba(255, 255, 255, 0.3) !important;
+        color: white !important;
+      }
+
+      aside.sidebar.collapsed .sidebar-toggle-inside-container {
+        justify-content: center !important;
+        padding: 0 !important;
+        margin-bottom: 1.5rem;
       }
 
       .sidebar-header {

@@ -5,7 +5,7 @@ A modern, responsive Web Application designed for managing the daily financial l
 This project is built using a decoupled architecture:
 * **Frontend:** Hosted on Netlify as a single-page standalone web app shell.
 * **Backend API:** Google Apps Script Web App.
-* **Database:** Google Sheets (Spreadsheet).
+* **Database:** Cloud Firestore (Firebase) for high-performance, real-time data sync.
 
 ---
 
@@ -34,8 +34,15 @@ This project is built using a decoupled architecture:
    * **Admin Role** gains access to User Management (approvals, role edits, password resets).
 
 6. **Database Backup & Restore (JSON):**
-   * **Export Backup:** Downloads your entire database (Rojnamcha data, details, dropdowns, and users) as a single `.json` file.
-   * **Import Backup:** Restores your entire database from a JSON backup file (requires confirmation keyword `RESTORE`).
+   * **Export Backup:** Downloads your entire Firestore database (Rojnamcha data, details, dropdowns, and users) as a single `.json` file.
+   * **Import Backup:** Restores your entire database from a JSON backup file (requires confirmation keyword `RESTORE`). Supports seamless translation from old Google Sheets JSON backups.
+
+7. **Dedicated Bank Account Ledger:**
+   * Track cash deposits to the bank separately.
+   * View all-time total deposits and custom range deposits.
+   * Add new deposits directly from the Bank Account ledger screen using a built-in cash denomination counter.
+   * Print formatted individual challan/voucher slips with denomination breakdowns for auditing.
+   * Export custom statement ranges to CSV for offline analysis.
 
 ---
 
