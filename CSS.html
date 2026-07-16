@@ -1894,6 +1894,38 @@
           margin: 0 auto !important;
         }
         
+        /* Thermal 80mm Print Mode */
+        body.print-thermal-80mm-mode .app-container,
+        body.print-thermal-80mm-mode .preview-banner,
+        body.print-thermal-80mm-mode .toast-container,
+        body.print-thermal-80mm-mode .loading-overlay,
+        body.print-thermal-80mm-mode .modal-overlay {
+          display: none !important;
+        }
+        body.print-thermal-80mm-mode #detailed-ledger-print-container {
+          display: block !important;
+          width: 80mm !important;
+          max-width: 80mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        
+        /* Thermal 58mm Print Mode */
+        body.print-thermal-58mm-mode .app-container,
+        body.print-thermal-58mm-mode .preview-banner,
+        body.print-thermal-58mm-mode .toast-container,
+        body.print-thermal-58mm-mode .loading-overlay,
+        body.print-thermal-58mm-mode .modal-overlay {
+          display: none !important;
+        }
+        body.print-thermal-58mm-mode #detailed-ledger-print-container {
+          display: block !important;
+          width: 58mm !important;
+          max-width: 58mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        
         /* Gmail-aligned Print Styles */
         body.print-detailed-ledger-mode .daily-ledger-page {
           font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;

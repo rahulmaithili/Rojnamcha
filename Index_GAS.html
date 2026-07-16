@@ -37,9 +37,17 @@
           
           <!-- Navigation Tabs -->
           <div class="sidebar-tabs" style="display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 1.5rem; background: rgba(255,255,255,0.03); padding: 0.375rem; border-radius: 0.5rem; border: 1px solid rgba(255,255,255,0.08);">
-            <button type="button" class="sidebar-tab active" id="tab-daily" style="text-align: left; width: 100%; padding: 0.625rem 0.75rem; border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.85rem; border-radius: 0.375rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.75rem;">
+            <button type="button" class="sidebar-tab active" id="tab-dashboard" style="text-align: left; width: 100%; padding: 0.625rem 0.75rem; border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.85rem; border-radius: 0.375rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.75rem;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+              <span class="sidebar-tab-text">Dashboard</span>
+            </button>
+            <button type="button" class="sidebar-tab" id="tab-daily" style="text-align: left; width: 100%; padding: 0.625rem 0.75rem; border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.85rem; border-radius: 0.375rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.75rem;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
               <span class="sidebar-tab-text">Daily Entry</span>
+            </button>
+            <button type="button" class="sidebar-tab" id="tab-search" style="text-align: left; width: 100%; padding: 0.625rem 0.75rem; border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.85rem; border-radius: 0.375rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.75rem;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <span class="sidebar-tab-text">Search Ledger</span>
             </button>
             <button type="button" class="sidebar-tab" id="tab-reports" style="text-align: left; width: 100%; padding: 0.625rem 0.75rem; border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.85rem; border-radius: 0.375rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.75rem;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
@@ -49,6 +57,10 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
               <span class="sidebar-tab-text">Cash Audit & Slips</span>
             </button>
+            <button type="button" class="sidebar-tab" id="tab-bank-ledger" style="text-align: left; width: 100%; padding: 0.625rem 0.75rem; border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.85rem; border-radius: 0.375rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.75rem;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+              <span class="sidebar-tab-text">Bank Account</span>
+            </button>
             <button type="button" class="sidebar-tab" id="tab-dropdowns" style="text-align: left; width: 100%; padding: 0.625rem 0.75rem; border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.85rem; border-radius: 0.375rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.75rem;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
               <span class="sidebar-tab-text">Manage Dropdowns</span>
@@ -56,10 +68,6 @@
             <button type="button" class="sidebar-tab" id="tab-users" style="text-align: left; width: 100%; padding: 0.625rem 0.75rem; border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.85rem; border-radius: 0.375rem; cursor: pointer; transition: all 0.2s ease; display: none; align-items: center; gap: 0.75rem;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
               <span class="sidebar-tab-text">User Management</span>
-            </button>
-            <button type="button" class="sidebar-tab" id="tab-bank-ledger" style="text-align: left; width: 100%; padding: 0.625rem 0.75rem; border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.85rem; border-radius: 0.375rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 0.75rem;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-              <span class="sidebar-tab-text">Bank Account</span>
             </button>
           </div>
           
@@ -174,6 +182,142 @@
             </div>
           </div>
           
+          <!-- Dashboard Workspace View -->
+          <div id="dashboard-workspace-view" style="display: flex; flex-direction: column; gap: 2rem;">
+            <!-- Welcome Alert / Pending Reminders -->
+            <div id="dashboard-pending-reminder" style="display: none; background: linear-gradient(135deg, #fef3c7, #fffbeb); border-left: 5px solid #d97706; padding: 1rem; border-radius: 0.5rem; align-items: center; justify-content: space-between; gap: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                <div>
+                  <h4 style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #78350f;">Ledger Pending Alert</h4>
+                  <p id="dashboard-reminder-text" style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: #92400e;">Today's entry is not recorded yet. Please fill the ledger.</p>
+                </div>
+              </div>
+              <button type="button" class="action-btn-sidebar btn-new" id="dashboard-reminder-btn" style="margin: 0; width: auto; font-size: 0.8rem; height: 32px; padding: 0 1rem; display: flex; align-items: center; gap: 0.35rem; background: #d97706; color: white; border: none; border-radius: 0.375rem; cursor: pointer; font-weight: 700;">
+                Create Today's Entry
+              </button>
+            </div>
+
+            <!-- Key Stats Cards -->
+            <div class="reconciliation-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+              <div class="reconciliation-card" style="border-left: 4px solid var(--receipt-primary);">
+                <label>Today's Receipts</label>
+                <div class="reconciliation-val-container">
+                  <span class="reconciliation-val-symbol" style="color: var(--receipt-primary);">₹</span>
+                  <span id="dash-receipts-val" class="reconciliation-val" style="color: var(--receipt-primary);">0.00</span>
+                </div>
+              </div>
+              <div class="reconciliation-card" style="border-left: 4px solid var(--expense-primary);">
+                <label>Today's Expenses</label>
+                <div class="reconciliation-val-container">
+                  <span class="reconciliation-val-symbol" style="color: var(--expense-primary);">₹</span>
+                  <span id="dash-expenses-val" class="reconciliation-val" style="color: var(--expense-primary);">0.00</span>
+                </div>
+              </div>
+              <div class="reconciliation-card" style="border-left: 4px solid var(--primary-color);">
+                <label>Today's Net Balance</label>
+                <div class="reconciliation-val-container">
+                  <span class="reconciliation-val-symbol" style="color: var(--primary-color);">₹</span>
+                  <span id="dash-net-val" class="reconciliation-val" style="color: var(--primary-color);">0.00</span>
+                </div>
+              </div>
+              <div class="reconciliation-card" style="border-left: 4px solid var(--accent-gold);">
+                <label>Closing Cash in Hand</label>
+                <div class="reconciliation-val-container">
+                  <span class="reconciliation-val-symbol" style="color: var(--accent-gold-text);">₹</span>
+                  <span id="dash-closing-val" class="reconciliation-val" style="color: var(--accent-gold-text);">0.00</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Last 7 Days Mini Chart & Activity -->
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;" class="bank-grid-container">
+              <!-- SVG Bar Chart -->
+              <div class="ledger-section-card" style="padding: 1.25rem; display: flex; flex-direction: column; align-self: start;">
+                <div class="section-header-banner" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; margin: -1.25rem -1.25rem 1rem -1.25rem; padding: 0.75rem 1.25rem; border-radius: 0.5rem 0.5rem 0 0; font-size: 0.95rem; font-weight: 700;">
+                  Last 7 Days Financial Trend (Receipt vs Expense)
+                </div>
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-height: 220px;" id="dash-chart-container">
+                  <!-- Dynamic SVG Chart will go here -->
+                </div>
+              </div>
+              
+              <!-- Quick Navigation & Missing Days List -->
+              <div class="ledger-section-card" style="padding: 1.25rem; display: flex; flex-direction: column; align-self: start;">
+                <div class="section-header-banner" style="background: linear-gradient(135deg, #1e293b, #334155); color: white; margin: -1.25rem -1.25rem 1rem -1.25rem; padding: 0.75rem 1.25rem; border-radius: 0.5rem 0.5rem 0 0; font-size: 0.95rem; font-weight: 700;">
+                  Recent Missing Entries
+                </div>
+                <div style="flex: 1; overflow-y: auto; max-height: 220px;" id="dash-missing-list">
+                  <!-- Dynamic list of missing dates -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Search Workspace View -->
+          <div id="search-workspace-view" style="display: none; flex-direction: column; gap: 2rem;">
+            <!-- Search Filter Card -->
+            <section class="ledger-section-card" style="padding: 1.5rem;">
+              <div class="section-header-banner" style="background: linear-gradient(135deg, #1e293b, #334155); color: white; border-radius: 0.5rem 0.5rem 0 0; margin: -1.5rem -1.5rem 1.5rem -1.5rem; padding: 1rem 1.5rem; font-size: 1rem;">
+                <span style="display:flex;align-items:center;gap:0.5rem;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  Search &amp; Filter Ledger Entries
+                </span>
+              </div>
+              
+              <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+                  <!-- Query Input -->
+                  <div style="flex: 2; min-width: 250px; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <label for="search-query" style="font-size: 0.85rem; font-weight: 600; color: var(--text-dark);">Search Query (Name, Particulars, or Amount)</label>
+                    <input type="text" id="search-query" class="table-input" style="height: 38px; background: white; border: 1px solid var(--border-color); color: var(--text-dark);" placeholder="e.g. name transfer, regulator, 177...">
+                  </div>
+                  <!-- Start Date -->
+                  <div style="flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <label for="search-start-date" style="font-size: 0.85rem; font-weight: 600; color: var(--text-dark);">Start Date</label>
+                    <input type="date" id="search-start-date" class="table-input" style="height: 38px; background: white; border: 1px solid var(--border-color); color: var(--text-dark);">
+                  </div>
+                  <!-- End Date -->
+                  <div style="flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <label for="search-end-date" style="font-size: 0.85rem; font-weight: 600; color: var(--text-dark);">End Date</label>
+                    <input type="date" id="search-end-date" class="table-input" style="height: 38px; background: white; border: 1px solid var(--border-color); color: var(--text-dark);">
+                  </div>
+                  <!-- Search button -->
+                  <button type="button" class="action-btn-sidebar btn-new" id="btn-execute-search" style="width: auto; margin-bottom: 0; padding: 0.625rem 1.5rem; font-size: 0.9rem; height: 38px; display: flex; align-items: center; gap: 0.5rem; background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; border-radius: 0.375rem; color: white; cursor: pointer; font-weight: 700;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    Search Entries
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Search Results Card -->
+            <section class="ledger-section-card" id="search-results-section" style="display: none; padding: 1.25rem;">
+              <div class="section-header-banner" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border-radius: 0.5rem 0.5rem 0 0; margin: -1.25rem -1.25rem 1rem -1.25rem; padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight: 700;">
+                Matching Entries Found
+              </div>
+              
+              <div class="ledger-table-container">
+                <table class="ledger-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 110px;">Date</th>
+                      <th style="width: 90px; text-align: center;">Type</th>
+                      <th>Details / Particulars</th>
+                      <th style="width: 100px; text-align: right;">Rate (₹)</th>
+                      <th style="width: 70px; text-align: center;">Qty</th>
+                      <th style="width: 120px; text-align: right;">Amount (₹)</th>
+                      <th style="width: 80px; text-align: center;" class="no-print">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="search-results-tbody">
+                    <!-- Dynamic search rows will be loaded here -->
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
           <!-- Daily Entry Workspace View -->
           <div id="daily-workspace-view" style="display: flex; flex-direction: column; gap: 2rem;">
             <!-- Mobile Controls Card (Visible only on mobile) -->
@@ -856,11 +1000,18 @@
         </div>
         
         <!-- Action Buttons (Daily Ledger Specific) -->
-        <footer class="footer-action-bar" id="daily-footer-bar" style="gap: 0.75rem;">
-          <button class="footer-btn btn-print" id="btn-print-ledger" style="width: auto; padding: 0.75rem 1.5rem;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
-            Print / Export PDF
-          </button>
+        <footer class="footer-action-bar" id="daily-footer-bar" style="gap: 0.75rem; flex-wrap: wrap;">
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <select id="print-format-select" class="table-input" style="height: 38px; padding: 0.25rem 0.5rem; background: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-dark); border-radius: 0.375rem; font-weight: 600; font-size: 0.85rem; outline: none; margin-bottom: 0;">
+              <option value="A4">Standard A4 Format</option>
+              <option value="80mm">Thermal 80mm Slip</option>
+              <option value="58mm">Thermal 58mm Slip</option>
+            </select>
+            <button class="footer-btn btn-print" id="btn-print-ledger" style="width: auto; padding: 0.75rem 1.5rem; height: 38px; margin-bottom: 0; display: flex; align-items: center; justify-content: center; gap: 0.35rem;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+              Print Ledger
+            </button>
+          </div>
           
           <button class="footer-btn btn-print" id="btn-email-ledger-daily" style="width: auto; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #059669, #10b981); color: white; border: none;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
@@ -1466,25 +1617,25 @@
     
     <!-- Mobile Bottom Navigation Bar -->
     <nav class="mobile-bottom-nav">
-      <button type="button" class="mobile-nav-btn active" data-tab="tab-daily">
+      <button type="button" class="mobile-nav-btn active" data-tab="tab-dashboard">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+        <span>Dashboard</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" data-tab="tab-daily">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
         <span>Daily</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" data-tab="tab-search">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <span>Search</span>
       </button>
       <button type="button" class="mobile-nav-btn" data-tab="tab-reports">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
         <span>Reports</span>
       </button>
-      <button type="button" class="mobile-nav-btn" data-tab="tab-audit">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-        <span>Audit</span>
-      </button>
       <button type="button" class="mobile-nav-btn" data-tab="tab-bank-ledger">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
         <span>Bank</span>
-      </button>
-      <button type="button" class="mobile-nav-btn" data-tab="tab-dropdowns">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-        <span>Dropdowns</span>
       </button>
     </nav>
     

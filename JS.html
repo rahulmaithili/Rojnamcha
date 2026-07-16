@@ -1277,6 +1277,99 @@ window.firebase_getBankLedgerData = async function(args, successHandler, failure
   }
 };
 
+
+window.firebase_getDashboardData = async function(args, successHandler, failureHandler) {
+  try {
+    const todayStr = args[0];
+    
+    // Get today's summary
+    const todayDoc = await db.collection('rojnamcha').doc(todayStr).get();
+    const todayData = todayDoc.exists ? todayDoc.data() : null;
+    
+    // Calculate last 7 dates
+    const datesList = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(todayStr);
+      d.setDate(d.getDate() - i);
+      datesList.push(d.toISOString().split('T')[0]);
+    }
+    
+    const startRange = datesList[0];
+    const endRange = datesList[6];
+    
+    // Query summaries in range
+    const rangeSnap = await db.collection('rojnamcha')
+      .where('date', '>=', startRange)
+      .where('date', '<=', endRange)
+      .get();
+      
+    const rangeMap = {};
+    rangeSnap.forEach(doc => {
+      rangeMap[doc.id] = doc.data();
+    });
+    
+    const trend = datesList.map(dStr => {
+      const day = rangeMap[dStr] || {};
+      return {
+        date: dStr,
+        receipts: parseFloat(day.receiptTotal || day.receipts || 0),
+        expenses: parseFloat(day.expenseTotal || day.expenses || 0),
+        exists: !!rangeMap[dStr]
+      };
+    });
+    
+    const missingDays = datesList.filter(dStr => !rangeMap[dStr]);
+    
+    successHandler({
+      today: todayData,
+      trend: trend,
+      missingDays: missingDays
+    });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_searchEntries = async function(args, successHandler, failureHandler) {
+  try {
+    const query = args[0] ? args[0].trim().toLowerCase() : '';
+    const start = args[1];
+    const end = args[2];
+    
+    if (!start || !end) throw new Error('Start and End dates are required');
+    
+    const snap = await db.collection('rojnamcha_details')
+      .where('date', '>=', start)
+      .where('date', '<=', end)
+      .get();
+      
+    const results = [];
+    snap.forEach(doc => {
+      const data = doc.data();
+      const detailsText = (data.details || '').toLowerCase();
+      const rateText = (data.rate || 0).toString();
+      const amountText = (data.amount || 0).toString();
+      
+      if (!query || detailsText.includes(query) || rateText.includes(query) || amountText.includes(query)) {
+        results.push({
+          id: doc.id,
+          date: data.date,
+          section: data.section,
+          details: data.details,
+          rate: parseFloat(data.rate) || 0,
+          qty: parseFloat(data.qty) || 0,
+          amount: parseFloat(data.amount) || 0
+        });
+      }
+    });
+    
+    results.sort((a, b) => new Date(b.date) - new Date(a.date));
+    successHandler(results);
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
 window.firebase_getRangeAuditData = async function(args, successHandler, failureHandler) {
   try {
     const start = args[0];
@@ -3175,6 +3268,16 @@ const state = {
         if (btnCloseSection) btnCloseSection.addEventListener('click', closeCashDrawer);
         const btnCancelSection = document.getElementById('btn-close-drawer-cancel');
         if (btnCancelSection) btnCancelSection.addEventListener('click', closeCashDrawer);
+        
+        // Dashboard & Search listeners
+        const executeSearchBtn = document.getElementById('btn-execute-search');
+        if (executeSearchBtn) executeSearchBtn.addEventListener('click', executeSearch);
+        
+        const dashReminderBtn = document.getElementById('dashboard-reminder-btn');
+        if (dashReminderBtn) dashReminderBtn.addEventListener('click', goToDailyEntryToday);
+        
+        // Request daily notification permission if needed
+        setupDailyReminder();
       }
 
       function showLoading(show, message = 'Processing...') {
@@ -3303,14 +3406,18 @@ const state = {
 
       // Workspace tab navigation
       function setupNavigation() {
+        const tabDashboard = document.getElementById('tab-dashboard');
         const tabDaily = document.getElementById('tab-daily');
+        const tabSearch = document.getElementById('tab-search');
         const tabReports = document.getElementById('tab-reports');
         const tabAudit = document.getElementById('tab-audit');
         const tabDropdowns = document.getElementById('tab-dropdowns');
         const tabUsers = document.getElementById('tab-users');
         const tabBankLedger = document.getElementById('tab-bank-ledger');
         
+        const dashboardView = document.getElementById('dashboard-workspace-view');
         const dailyView = document.getElementById('daily-workspace-view');
+        const searchView = document.getElementById('search-workspace-view');
         const reportsView = document.getElementById('reports-workspace-view');
         const auditView = document.getElementById('audit-workspace-view');
         const dropdownsView = document.getElementById('dropdowns-workspace-view');
@@ -3333,8 +3440,8 @@ const state = {
 
         function switchTab(active) {
           // Reset all
-          [tabDaily, tabReports, tabAudit, tabDropdowns, tabUsers, tabBankLedger].forEach(t => { if (t) t.classList.remove('active'); });
-          [dailyView, reportsView, auditView, dropdownsView, usersView, bankLedgerView].forEach(v => { if (v) v.style.display = 'none'; });
+          [tabDashboard, tabDaily, tabSearch, tabReports, tabAudit, tabDropdowns, tabUsers, tabBankLedger].forEach(t => { if (t) t.classList.remove('active'); });
+          [dashboardView, dailyView, searchView, reportsView, auditView, dropdownsView, usersView, bankLedgerView].forEach(v => { if (v) v.style.display = 'none'; });
           [dailyControls, reportsControls, auditControls, dropdownsControls, usersControls, bankLedgerControls].forEach(c => { if (c) c.style.display = 'none'; });
           [dailyFooter, reportsFooter, bankFooter].forEach(f => { if (f) f.style.display = 'none'; });
           active.classList.add('active');
@@ -3349,6 +3456,16 @@ const state = {
           });
         }
         
+        if (tabDashboard) {
+          tabDashboard.addEventListener('click', function() {
+            switchTab(tabDashboard);
+            if (dashboardView) dashboardView.style.display = 'flex';
+            dateLabel.innerText = 'DASHBOARD';
+            dateDisplay.innerText = 'Overview';
+            loadDashboardData();
+          });
+        }
+        
         tabDaily.addEventListener('click', function() {
           switchTab(tabDaily);
           dailyView.style.display = 'flex';
@@ -3357,6 +3474,25 @@ const state = {
           dateLabel.innerText = 'LEDGER DATE';
           dateDisplay.innerText = formatDateReadable(state.selectedDate);
         });
+        
+        if (tabSearch) {
+          tabSearch.addEventListener('click', function() {
+            switchTab(tabSearch);
+            if (searchView) searchView.style.display = 'flex';
+            dateLabel.innerText = 'SEARCH';
+            dateDisplay.innerText = 'Ledger history';
+            
+            const startInput = document.getElementById('search-start-date');
+            const endInput = document.getElementById('search-end-date');
+            if (!startInput.value || !endInput.value) {
+              const today = new Date();
+              const start = new Date();
+              start.setDate(today.getDate() - 30);
+              startInput.value = start.toISOString().split('T')[0];
+              endInput.value = today.toISOString().split('T')[0];
+            }
+          });
+        }
         
         tabReports.addEventListener('click', function() {
           switchTab(tabReports);
@@ -3461,7 +3597,7 @@ const state = {
         });
 
         // Initialize active tab state explicitly
-        if (tabDaily) tabDaily.click();
+        if (tabDashboard) tabDashboard.click();
       }
 
       // Bank Account Ledger Functions
@@ -5027,9 +5163,9 @@ const state = {
         localStorage.removeItem('rojnamcha_session');
         state.currentUser = null;
         
-        // Reset navigation to daily entry
-        const tabDaily = document.getElementById('tab-daily');
-        if (tabDaily) tabDaily.click();
+        // Reset navigation to dashboard
+        const tabDashboard = document.getElementById('tab-dashboard');
+        if (tabDashboard) tabDashboard.click();
         
         showAuthScreen('login');
         showToast('You have been logged out.', 'info');
@@ -5989,12 +6125,24 @@ const state = {
         };
 
         const printContainer = document.getElementById('detailed-ledger-print-container');
-        printContainer.innerHTML = buildDailyLedgerPrintHtml(dayData);
+        const format = document.getElementById('print-format-select').value;
         
-        document.body.classList.add('print-detailed-ledger-mode');
+        let printClass = 'print-detailed-ledger-mode';
+        if (format === '80mm') {
+          printContainer.innerHTML = buildDailyLedgerThermalPrintHtml(dayData, '80mm');
+          printClass = 'print-thermal-80mm-mode';
+        } else if (format === '58mm') {
+          printContainer.innerHTML = buildDailyLedgerThermalPrintHtml(dayData, '58mm');
+          printClass = 'print-thermal-58mm-mode';
+        } else {
+          printContainer.innerHTML = buildDailyLedgerPrintHtml(dayData);
+          printClass = 'print-detailed-ledger-mode';
+        }
+        
+        document.body.classList.add(printClass);
         window.print();
         setTimeout(function() {
-          document.body.classList.remove('print-detailed-ledger-mode');
+          document.body.classList.remove('print-detailed-ledger-mode', 'print-thermal-80mm-mode', 'print-thermal-58mm-mode');
           printContainer.innerHTML = '';
         }, 1000);
       }
@@ -6175,4 +6323,373 @@ const state = {
         };
         reader.readAsText(file);
       };
+
+      // ==========================================
+      // DASHBOARD VIEW & MINI FINANCIAL CHART
+      // ==========================================
+      function loadDashboardData() {
+        const todayStr = state.selectedDate || new Date().toISOString().split('T')[0];
+        const container = document.getElementById('dash-chart-container');
+        if (!container || !container.innerHTML.trim()) {
+          showLoading(true, 'Loading Dashboard...');
+        }
+        
+        google.script.run
+          .withSuccessHandler(function(dashData) {
+            showLoading(false);
+            
+            // Render Stats Card Values
+            const summary = dashData.today || { receiptTotal: 0, expenseTotal: 0, netBalance: 0, closingCashInHand: 0 };
+            document.getElementById('dash-receipts-val').innerText = (summary.receiptTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('dash-expenses-val').innerText = (summary.expenseTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('dash-net-val').innerText = (summary.netBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('dash-closing-val').innerText = (summary.closingCashInHand || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            
+            // Render Pending Alert
+            const reminderEl = document.getElementById('dashboard-pending-reminder');
+            if (reminderEl) {
+              if (!dashData.today) {
+                reminderEl.style.display = 'flex';
+                document.getElementById('dashboard-reminder-text').innerText = "Today's ledger entry is not recorded yet. Please fill the ledger.";
+              } else {
+                reminderEl.style.display = 'none';
+              }
+            }
+            
+            // Render SVG mini bar chart
+            renderDashboardChart(dashData.trend);
+            
+            // Render Recent Missing Dates List
+            renderDashboardMissingList(dashData.missingDays);
+            
+            // Check browser notification reminder
+            triggerBrowserReminder(dashData.missingDays);
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to load dashboard: ' + err.message, 'error');
+          })
+          .getDashboardData(todayStr);
+      }
+      
+      function renderDashboardChart(trend) {
+        const container = document.getElementById('dash-chart-container');
+        if (!container) return;
+        if (!trend || trend.length === 0) {
+          container.innerHTML = '<span style="color:var(--text-muted);">No trend data available.</span>';
+          return;
+        }
+        
+        // Find max value to scale the height
+        const maxVal = Math.max(...trend.map(t => Math.max(t.receipts, t.expenses)), 1000);
+        
+        let svg = `
+          <svg viewBox="0 0 500 220" width="100%" height="100%" style="overflow: visible;">
+            <!-- Grid lines -->
+            <line x1="40" y1="20" x2="480" y2="20" stroke="var(--border-color)" stroke-dasharray="3,3" opacity="0.3"/>
+            <line x1="40" y1="70" x2="480" y2="70" stroke="var(--border-color)" stroke-dasharray="3,3" opacity="0.3"/>
+            <line x1="40" y1="120" x2="480" y2="120" stroke="var(--border-color)" stroke-dasharray="3,3" opacity="0.3"/>
+            <line x1="40" y1="170" x2="480" y2="170" stroke="var(--border-color)" stroke-dasharray="3,3" opacity="0.3"/>
+            <line x1="40" y1="170" x2="480" y2="170" stroke="var(--text-muted)" stroke-width="1.5"/>
+            
+            <!-- Y-Axis Labels -->
+            <text x="35" y="24" fill="var(--text-muted)" font-size="9" font-weight="600" text-anchor="end">₹${(maxVal).toFixed(0)}</text>
+            <text x="35" y="74" fill="var(--text-muted)" font-size="9" font-weight="600" text-anchor="end">₹${(maxVal * 0.66).toFixed(0)}</text>
+            <text x="35" y="124" fill="var(--text-muted)" font-size="9" font-weight="600" text-anchor="end">₹${(maxVal * 0.33).toFixed(0)}</text>
+            <text x="35" y="174" fill="var(--text-muted)" font-size="9" font-weight="600" text-anchor="end">₹0</text>
+        `;
+        
+        const colWidth = 60;
+        const startX = 60;
+        
+        trend.forEach((day, index) => {
+          const x = startX + index * colWidth;
+          const rHeight = (day.receipts / maxVal) * 140;
+          const eHeight = (day.expenses / maxVal) * 140;
+          
+          const rY = 170 - rHeight;
+          const eY = 170 - eHeight;
+          
+          const dateObj = new Date(day.date);
+          const dateLabel = dateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+          
+          svg += `
+            <!-- Receipt bar (Green) -->
+            <rect x="${x}" y="${rY}" width="16" height="${rHeight}" fill="var(--receipt-primary)" rx="2" style="transition: all 0.5s ease-out; cursor: pointer;">
+              <title>Date: ${day.date}\nReceipts: ₹${day.receipts.toFixed(2)}</title>
+            </rect>
+            <!-- Expense bar (Red) -->
+            <rect x="${x + 20}" y="${eY}" width="16" height="${eHeight}" fill="var(--expense-primary)" rx="2" style="transition: all 0.5s ease-out; cursor: pointer;">
+              <title>Date: ${day.date}\nExpenses: ₹${day.expenses.toFixed(2)}</title>
+            </rect>
+            
+            <!-- X-Axis Label -->
+            <text x="${x + 18}" y="192" fill="var(--text-muted)" font-size="9" font-weight="600" text-anchor="middle">${dateLabel}</text>
+          `;
+        });
+        
+        svg += `</svg>`;
+        container.innerHTML = svg;
+      }
+      
+      function renderDashboardMissingList(missingDays) {
+        const listEl = document.getElementById('dash-missing-list');
+        if (!listEl) return;
+        if (!missingDays || missingDays.length === 0) {
+          listEl.innerHTML = `
+            <div style="text-align: center; padding: 1.5rem; color: var(--receipt-primary); font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+              All entry records are complete!
+            </div>
+          `;
+          return;
+        }
+        
+        let html = '<div style="display: flex; flex-direction: column; gap: 0.5rem; width: 100%;">';
+        missingDays.forEach(dateStr => {
+          html += `
+            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-main); border: 1px dashed var(--border-color); padding: 0.5rem 0.75rem; border-radius: 0.375rem; width: 100%;">
+              <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-dark);">${formatDateReadable(dateStr)}</span>
+              <button type="button" class="action-btn-sidebar btn-new" onclick="goToDailyEntryDate('${dateStr}')" style="margin: 0; width: auto; font-size: 0.75rem; height: 28px; padding: 0 0.75rem; font-weight: 700; border-radius: 0.25rem;">
+                Create Entry
+              </button>
+            </div>
+          `;
+        });
+        html += '</div>';
+        listEl.innerHTML = html;
+      }
+
+      window.goToDailyEntryDate = function(dateStr) {
+        setLedgerDateInput(dateStr);
+        handleDateChange(dateStr);
+        const tabDaily = document.getElementById('tab-daily');
+        if (tabDaily) tabDaily.click();
+      };
+
+      window.goToDailyEntryToday = function() {
+        const todayStr = new Date().toISOString().split('T')[0];
+        goToDailyEntryDate(todayStr);
+      };
+
+      // ==========================================
+      // SEARCH & FILTER LEDGER ENTRIES
+      // ==========================================
+      function executeSearch() {
+        const query = document.getElementById('search-query').value.trim();
+        const start = document.getElementById('search-start-date').value;
+        const end = document.getElementById('search-end-date').value;
+        
+        if (!start || !end) {
+          showToast('Start and End dates are required for searching.', 'error');
+          return;
+        }
+        
+        showLoading(true, 'Searching entries...');
+        google.script.run
+          .withSuccessHandler(function(results) {
+            showLoading(false);
+            renderSearchResults(results);
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Search failed: ' + err.message, 'error');
+          })
+          .searchEntries(query, start, end);
+      }
+      
+      function renderSearchResults(results) {
+        const resultsSection = document.getElementById('search-results-section');
+        const tbody = document.getElementById('search-results-tbody');
+        if (!resultsSection || !tbody) return;
+        tbody.innerHTML = '';
+        
+        if (!results || results.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No matching entries found for query and date range.</td></tr>`;
+          resultsSection.style.display = 'block';
+          return;
+        }
+        
+        results.forEach(item => {
+          const typeBadge = item.section === 'Receipt' 
+            ? `<span class="status-badge status-approved" style="background:var(--receipt-bg); color:var(--receipt-text); font-weight:700;">Receipt</span>`
+            : `<span class="status-badge status-pending" style="background:var(--expense-bg); color:var(--expense-text); font-weight:700;">Expense</span>`;
+            
+          tbody.innerHTML += `
+            <tr>
+              <td style="font-weight: 600; font-size: 0.85rem;">${formatDateReadable(item.date)}</td>
+              <td align="center">${typeBadge}</td>
+              <td style="font-weight: 500; font-size: 0.85rem;">${item.details || ''}</td>
+              <td align="right" style="font-family: monospace; font-size: 0.85rem;">₹${(item.rate || 0).toFixed(2)}</td>
+              <td align="center" style="font-weight: 600; font-size: 0.85rem;">${item.qty || 1}</td>
+              <td align="right" style="font-family: monospace; font-weight: 700; font-size: 0.85rem; color: ${item.section === 'Receipt' ? 'var(--receipt-text)' : 'var(--expense-text)'}">₹${(item.amount || 0).toFixed(2)}</td>
+              <td align="center">
+                <button type="button" class="action-btn-sidebar btn-new" onclick="goToDailyEntryDate('${item.date}')" style="margin: 0; width: auto; font-size: 0.75rem; height: 28px; padding: 0 0.75rem; font-weight: 700; border-radius: 0.25rem;">
+                  Edit Date
+                </button>
+              </td>
+            </tr>
+          `;
+        });
+        
+        resultsSection.style.display = 'block';
+      }
+
+      // ==========================================
+      // BROWSER NOTIFICATIONS & REMINDERS
+      // ==========================================
+      function setupDailyReminder() {
+        if ('Notification' in window) {
+          if (Notification.permission === 'default') {
+            Notification.requestPermission();
+          }
+        }
+      }
+      
+      function triggerBrowserReminder(missingDays) {
+        if (!missingDays || missingDays.length === 0) return;
+        
+        const todayStr = new Date().toISOString().split('T')[0];
+        const isTodayMissing = missingDays.includes(todayStr);
+        
+        if (isTodayMissing && 'Notification' in window && Notification.permission === 'granted') {
+          const lastNotified = localStorage.getItem('rojnamcha_last_notified');
+          if (lastNotified !== todayStr) {
+            new Notification("Rojnamcha Entry Pending", {
+              body: "Today's daily cash ledger entry has not been recorded yet. Please click to fill now.",
+              icon: (state.companyProfile && state.companyProfile.companyLogo) || ""
+            }).onclick = function() {
+              window.focus();
+              goToDailyEntryToday();
+            };
+            localStorage.setItem('rojnamcha_last_notified', todayStr);
+          }
+        }
+      }
+
+      // ==========================================
+      // THERMAL PRINTOUTS HTML BUILDER
+      // ==========================================
+      function buildDailyLedgerThermalPrintHtml(dayData, width) {
+        const summary = dayData.summary;
+        const details = dayData.details || [];
+        const profile = state.companyProfile || {};
+        const companyName = profile.companyName || 'Rojnamcha Ledger';
+        const companyAddress = profile.companyAddress || '';
+        const companyGSTIN = profile.companyGSTIN || '';
+        
+        const receiptTotal = parseFloat(summary.receiptTotal || 0);
+        const expenseTotal = parseFloat(summary.expenseTotal || 0);
+        const openingCash  = parseFloat(summary.openingCash || 0);
+        const netBalance   = parseFloat(summary.netBalance != null ? summary.netBalance : (openingCash + receiptTotal - expenseTotal));
+        const cashSendToHome     = parseFloat(summary.cashSendToHome || 0);
+        const cashDepositToBank  = parseFloat(summary.cashDepositToBank || 0);
+        const closingCashInHand  = parseFloat(summary.closingCashInHand || 0);
+
+        const receipts = details.filter(d => d.section === 'Receipt');
+        const expenses = details.filter(d => d.section === 'Expense');
+        
+        receipts.sort((a, b) => a.sl - b.sl);
+        expenses.sort((a, b) => a.sl - b.sl);
+        
+        let html = `
+          <div style="width: 100%; font-family: monospace; color: #000; padding: 2px; line-height: 1.3;">
+            <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 6px; margin-bottom: 6px;">
+              <h4 style="margin: 0; font-size: 13px; font-weight: bold; text-transform: uppercase;">${companyName}</h4>
+              ${companyAddress ? `<p style="margin: 2px 0; font-size: 9px;">${companyAddress}</p>` : ''}
+              ${companyGSTIN ? `<p style="margin: 2px 0; font-size: 9px; font-weight: bold;">GSTIN: ${companyGSTIN}</p>` : ''}
+              <h5 style="margin: 6px 0 0 0; font-size: 11px; text-transform: uppercase; border-top: 1px dashed #000; padding-top: 4px;">DAILY CASH REGISTER</h5>
+              <p style="margin: 2px 0 0 0; font-size: 10px; font-weight: bold;">Date: ${formatDateReadable(summary.date)}</p>
+            </div>
+            
+            <!-- Receipts Section -->
+            <div style="margin-bottom: 8px;">
+              <div style="font-weight: bold; border-bottom: 1px dashed #000; font-size: 10px; padding-bottom: 1px; margin-bottom: 3px;">RECEIPTS (INFLOW)</div>
+              <table style="width: 100%; font-size: 9px; border-collapse: collapse;">
+        `;
+        
+        if (receipts.length === 0) {
+          html += `<tr><td colspan="2" style="padding: 2px 0; color: #555;">No receipts.</td></tr>`;
+        } else {
+          receipts.forEach(item => {
+            const multiplierStr = item.qty > 1 ? `(${item.qty}x₹${item.rate.toFixed(0)})` : '';
+            html += `
+              <tr>
+                <td style="padding: 2px 0; vertical-align: top;">${item.sl}. ${item.details} ${multiplierStr}</td>
+                <td style="padding: 2px 0; text-align: right; vertical-align: top; white-space: nowrap;">₹${item.amount.toFixed(2)}</td>
+              </tr>
+            `;
+          });
+        }
+        
+        html += `
+                <tr style="border-top: 1px dashed #000; font-weight: bold;">
+                  <td style="padding: 3px 0 1px 0;">Total Receipts</td>
+                  <td style="padding: 3px 0 1px 0; text-align: right;">₹${receiptTotal.toFixed(2)}</td>
+                </tr>
+              </table>
+            </div>
+            
+            <!-- Expenses Section -->
+            <div style="margin-bottom: 8px;">
+              <div style="font-weight: bold; border-bottom: 1px dashed #000; font-size: 10px; padding-bottom: 1px; margin-bottom: 3px;">EXPENSES (OUTFLOW)</div>
+              <table style="width: 100%; font-size: 9px; border-collapse: collapse;">
+        `;
+        
+        if (expenses.length === 0) {
+          html += `<tr><td colspan="2" style="padding: 2px 0; color: #555;">No expenses.</td></tr>`;
+        } else {
+          expenses.forEach((item, idx) => {
+            const multiplierStr = item.qty > 1 ? `(${item.qty}x₹${item.rate.toFixed(0)})` : '';
+            html += `
+              <tr>
+                <td style="padding: 2px 0; vertical-align: top;">${idx + 1}. ${item.details} ${multiplierStr}</td>
+                <td style="padding: 2px 0; text-align: right; vertical-align: top; white-space: nowrap;">₹${item.amount.toFixed(2)}</td>
+              </tr>
+            `;
+          });
+        }
+        
+        html += `
+                <tr style="border-top: 1px dashed #000; font-weight: bold;">
+                  <td style="padding: 3px 0 1px 0;">Total Expenses</td>
+                  <td style="padding: 3px 0 1px 0; text-align: right;">₹${expenseTotal.toFixed(2)}</td>
+                </tr>
+              </table>
+            </div>
+            
+            <!-- Summary totals -->
+            <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 4px 0; margin-bottom: 8px; font-size: 9px;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 1px 0;">Opening Cash</td>
+                  <td style="padding: 1px 0; text-align: right;">₹${openingCash.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 1px 0;">Net Cash Balance</td>
+                  <td style="padding: 1px 0; text-align: right;">₹${netBalance.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 1px 0;">Sent To Home</td>
+                  <td style="padding: 1px 0; text-align: right;">₹${cashSendToHome.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 1px 0;">Deposited to Bank</td>
+                  <td style="padding: 1px 0; text-align: right;">₹${cashDepositToBank.toFixed(2)}</td>
+                </tr>
+                <tr style="font-weight: bold; font-size: 10px;">
+                  <td style="padding: 3px 0 0 0;">Closing Cash In Hand</td>
+                  <td style="padding: 3px 0 0 0; text-align: right;">₹${closingCashInHand.toFixed(2)}</td>
+                </tr>
+              </table>
+            </div>
+            
+            <div style="text-align: center; font-size: 8px; color: #333; margin-top: 10px; border-top: 1px dashed #000; padding-top: 4px;">
+              <p style="margin: 0;">Generated by: ${state.currentUser ? (state.currentUser.name || state.currentUser.username) : 'System'}</p>
+              <p style="margin: 2px 0 0 0;">Rojnamcha Ledger Manager</p>
+            </div>
+          </div>
+        `;
+        return html;
+      }
     </script>
