@@ -2295,3 +2295,8 @@ function getSpreadsheetForYear(yearStr) {
   props.setProperty(propKey, newSs.getId());
   return newSs;
 }
+
+function getBankAccounts() { return []; }
+function addBankAccount(name) { return {}; }
+function deleteBankAccount(id) { return {}; }
+function deleteBankDeposit(id) { return {}; }

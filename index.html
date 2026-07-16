@@ -3138,74 +3138,110 @@
           </div>
           
           <!-- Bank Account Ledger View (Hidden by default) -->
-          <div id="bank-ledger-view" style="display: none; flex-direction: column; gap: 2rem;">
-            <!-- Agency Header Card (For printing scope) -->
-            <div class="ledger-section-card" style="padding: 1.5rem;">
-              <div class="section-header-banner" style="background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border-radius: 0.5rem 0.5rem 0 0; margin: -1.5rem -1.5rem 1.5rem -1.5rem; padding: 1rem 1.5rem; font-size: 1rem;">
-                <span style="display:flex;align-items:center;gap:0.5rem;">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-                  Bank Account Ledger &amp; Statement
-                </span>
+          <div id="bank-ledger-view" style="display: none; flex-direction: column; gap: 1.5rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;" class="bank-grid-container">
+              
+              <!-- LEFT COLUMN: BANK ACCOUNTS OVERVIEW -->
+              <div class="ledger-section-card" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; align-self: start;">
+                <div class="section-header-banner" style="background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border-radius: 0.5rem 0.5rem 0 0; margin: -1.25rem -1.25rem 1rem -1.25rem; padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                  Manage Bank Accounts
+                </div>
+                
+                <!-- Add Account Form -->
+                <div style="background: var(--bg-main); padding: 0.85rem; border-radius: 0.375rem; border: 1px dashed var(--border-color);">
+                  <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">Add New Bank Account</div>
+                  <form id="add-bank-account-form" onsubmit="event.preventDefault(); handleAddBankAccount();" style="display:flex; gap:0.5rem;">
+                    <input type="text" id="new-bank-account-name" placeholder="e.g. SBI, HDFC..." class="table-input" style="flex:1; height:36px; background:white; border: 1.5px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem;" required>
+                    <button type="submit" class="action-btn-sidebar btn-new" style="margin-bottom:0; height:36px; padding:0 0.85rem; font-size:0.78rem; display:flex; align-items:center; justify-content:center;">Add</button>
+                  </form>
+                </div>
+                
+                <!-- Bank Accounts List Container -->
+                <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: -0.25rem;">Active Accounts &amp; Balances</div>
+                <div id="bank-accounts-list-container" style="display:flex; flex-direction:column; gap:0.5rem; max-height: 280px; overflow-y:auto; padding-right:0.25rem;">
+                  <!-- Populated dynamically -->
+                </div>
               </div>
               
-              <!-- Stats Panel -->
-              <div class="dashboard-stats" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 2rem;">
-                <div class="stat-card" style="border-left: 4px solid #0284c7;">
-                  <span class="stat-label">TOTAL DEPOSITS (ALL TIME)</span>
-                  <h2 id="bank-stat-total-alltime" class="stat-val" style="color: #0284c7;">₹ 0.00</h2>
+              <!-- RIGHT COLUMN: STATEMENT AND LOGS -->
+              <div class="ledger-section-card" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; flex: 2;">
+                <div class="section-header-banner" style="background: linear-gradient(135deg,#059669,#047857); color: white; border-radius: 0.5rem 0.5rem 0 0; margin: -1.25rem -1.25rem 1rem -1.25rem; padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                  Ledger Statement Reports
                 </div>
-                <div class="stat-card" style="border-left: 4px solid #059669;">
-                  <span class="stat-label">DEPOSITED IN RANGE</span>
-                  <h2 id="bank-stat-total-range" class="stat-val" style="color: #059669;">₹ 0.00</h2>
-                </div>
-              </div>
-              
-              <!-- Filter Card -->
-              <div id="bank-filter-card" style="background-color: var(--bg-main); padding: 1.25rem; border-radius: 0.5rem; border: 1px dashed var(--border-color); margin-bottom: 1.5rem;">
-                <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem;">Statement Period</div>
-                <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
-                  <div style="flex: 1; min-width: 200px;">
-                    <label for="bank-start-date" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">Start Date</label>
-                    <input type="date" id="bank-start-date" class="table-input" style="height: 38px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+
+                <!-- Stats Panel -->
+                <div class="dashboard-stats" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 0.5rem; gap: 1rem;">
+                  <div class="stat-card" style="border-left: 4px solid #0284c7; padding:0.6rem 0.85rem;">
+                    <span class="stat-label" style="font-size:0.65rem;">TOTAL DEPOSITS (ALL TIME)</span>
+                    <h2 id="bank-stat-total-alltime" class="stat-val" style="color: #0284c7; font-size:1.15rem; margin-top:0.2rem;">₹ 0.00</h2>
                   </div>
-                  <div style="flex: 1; min-width: 200px;">
-                    <label for="bank-end-date" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">End Date</label>
-                    <input type="date" id="bank-end-date" class="table-input" style="height: 38px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+                  <div class="stat-card" style="border-left: 4px solid #059669; padding:0.6rem 0.85rem;">
+                    <span class="stat-label" style="font-size:0.65rem;">DEPOSITED IN RANGE</span>
+                    <h2 id="bank-stat-total-range" class="stat-val" style="color: #059669; font-size:1.15rem; margin-top:0.2rem;">₹ 0.00</h2>
                   </div>
-                  <button type="button" id="btn-generate-bank-ledger" class="btn-add-option" style="width: auto; height: 38px; padding: 0 1.5rem; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border: none; border-radius: 0.375rem; cursor: pointer; gap: 0.5rem;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    Generate Statement
-                  </button>
-                  <button type="button" id="btn-add-bank-deposit-trigger" class="btn-add-option" style="width: auto; height: 38px; padding: 0 1.5rem; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; background: linear-gradient(135deg,#10b981,#059669); color: white; border: none; border-radius: 0.375rem; cursor: pointer; gap: 0.5rem; margin-left: auto;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    Add Deposit Entry
-                  </button>
+                </div>
+
+                <!-- Filter Card -->
+                <div id="bank-filter-card" style="background-color: var(--bg-main); padding: 1rem; border-radius: 0.375rem; border: 1px dashed var(--border-color);">
+                  <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem;">Statement Period &amp; Bank Filters</div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;">
+                    <div style="flex: 1; min-width: 130px;">
+                      <label for="bank-start-date" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">Start Date</label>
+                      <input type="date" id="bank-start-date" class="table-input" style="height: 36px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+                    </div>
+                    <div style="flex: 1; min-width: 130px;">
+                      <label for="bank-end-date" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">End Date</label>
+                      <input type="date" id="bank-end-date" class="table-input" style="height: 36px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+                    </div>
+                    <div style="flex: 1; min-width: 160px;">
+                      <label for="bank-ledger-account-filter" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">Filter by Bank</label>
+                      <select id="bank-ledger-account-filter" class="table-input" style="height: 36px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+                        <option value="">All Bank Accounts</option>
+                      </select>
+                    </div>
+                    
+                    <div style="display:flex; gap:0.5rem; width:100%; margin-top:0.25rem;">
+                      <button type="button" id="btn-generate-bank-ledger" class="btn-add-option btn-new" style="flex:1; height: 38px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; gap: 0.35rem; box-shadow: 0 4px 6px -1px rgba(2,132,199,0.15);">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        Get Statement
+                      </button>
+                      <button type="button" id="btn-add-bank-deposit-trigger" class="btn-add-option btn-new" style="flex:1; height: 38px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; background: linear-gradient(135deg,#10b981,#059669); color: white; border: none; border-radius: 0.375rem; cursor: pointer; gap: 0.35rem; box-shadow: 0 4px 6px -1px rgba(16,185,129,0.15);">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        Add Deposit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Ledger Table -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.25rem;">
+                  <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Bank Deposit Logs</div>
+                  <span id="bank-record-count" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted);">0 records</span>
+                </div>
+                <div class="ledger-table-container">
+                  <table class="ledger-table" id="bank-ledger-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 100px;">Date</th>
+                        <th style="width: 135px;">Bank Account</th>
+                        <th style="width: 140px; text-align: right; padding-right: 1.5rem;">Amount (₹)</th>
+                        <th>Remarks / Notes</th>
+                        <th style="width: 180px; text-align: center;" class="no-print">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="bank-ledger-tbody">
+                      <tr>
+                        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No deposit logs loaded. Please select filters and click Get Statement.</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
               
-              <!-- Ledger Table -->
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Bank Deposit Logs</div>
-                <span id="bank-record-count" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">0 records</span>
-              </div>
-              <div class="ledger-table-container">
-                <table class="ledger-table" id="bank-ledger-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 150px;">Date</th>
-                      <th style="width: 200px; text-align: right; padding-right: 1.5rem;">Deposited Amount (₹)</th>
-                      <th>Note / Remarks</th>
-                      <th style="width: 80px; text-align: center;" class="no-print">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="bank-ledger-tbody">
-                    <tr>
-                      <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No deposit logs loaded. Please select a date range and click Generate Statement.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
             </div>
+          </div>
           </div>
         </div>
         
@@ -3613,10 +3649,17 @@
         </div>
         <div class="modal-body" style="padding: 1.5rem 1.25rem;">
           <form id="bank-deposit-form" onsubmit="event.preventDefault(); handleSaveBankDeposit();">
+            <input type="hidden" id="bank-deposit-id" value="">
             <div style="display: flex; flex-direction: column; gap: 1.25rem;">
               <div>
                 <label for="bank-deposit-date" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.4rem;">Ledger Date</label>
                 <input type="date" id="bank-deposit-date" class="table-input" style="height: 38px; background: white; border: 1.5px solid var(--border-color); border-radius: 0.375rem; padding: 0.25rem 0.75rem; width: 100%; font-family: inherit;" required>
+              </div>
+              <div>
+                <label for="bank-deposit-account-select" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.4rem;">Select Bank Account</label>
+                <select id="bank-deposit-account-select" class="table-input" style="height: 38px; background: white; border: 1.5px solid var(--border-color); border-radius: 0.375rem; padding: 0.25rem 0.75rem; width: 100%; font-family: inherit;" required>
+                  <!-- Populated dynamically -->
+                </select>
               </div>
               <div>
                 <label for="bank-deposit-amount" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.4rem;">Deposit Amount (₹)</label>
@@ -4749,84 +4792,265 @@ window.firebase_getDetailedRangeLedger = async function(args, successHandler, fa
   }
 };
 
-window.firebase_getBankLedgerData = async function(args, successHandler, failureHandler) {
+window.firebase_getBankAccounts = async function(args, successHandler, failureHandler) {
   try {
-    const start = args[0];
-    const end = args[1];
-    
-    // 1. Fetch all documents from 'rojnamcha' to calculate all-time total bank deposits
-    const allSummariesSnap = await db.collection('rojnamcha').get();
-    let totalAllTime = 0;
-    allSummariesSnap.forEach(doc => {
-      const s = doc.data();
-      totalAllTime += parseFloat(s.cashDepositToBank) || 0;
+    const snap = await db.collection('bank_accounts').get();
+    const accounts = [];
+    snap.forEach(doc => {
+      accounts.push({ id: doc.id, ...doc.data() });
     });
     
-    // 2. Fetch range summaries
-    const rangeSummariesSnap = await db.collection('rojnamcha')
-      .where('date', '>=', start)
-      .where('date', '<=', end)
-      .get();
-      
-    const rangeRecords = [];
-    let totalRange = 0;
+    // Auto-create Default Bank if none exists
+    if (accounts.length === 0) {
+      const defaultAcc = { name: 'Default Bank', createdAt: new Date().toISOString() };
+      await db.collection('bank_accounts').doc('default-bank').set(defaultAcc);
+      accounts.push({ id: 'default-bank', ...defaultAcc });
+    }
     
-    rangeSummariesSnap.forEach(doc => {
-      const s = doc.data();
-      const deposit = parseFloat(s.cashDepositToBank) || 0;
-      if (deposit > 0) {
-        totalRange += deposit;
-        rangeRecords.push({
-          date: s.date,
-          amount: deposit,
-          note: s.cashDepositToBankNote || '-'
-        });
-      }
-    });
-    
-    // Sort range records by date ascending
-    rangeRecords.sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    successHandler({
-      totalAllTime: totalAllTime,
-      totalRange: totalRange,
-      records: rangeRecords
-    });
+    successHandler(accounts);
   } catch (err) {
     if (failureHandler) failureHandler(err);
   }
 };
 
-window.firebase_saveBankDeposit = async function(args, successHandler, failureHandler) {
+window.firebase_addBankAccount = async function(args, successHandler, failureHandler) {
   try {
-    const dateStr = args[0];
-    const amount = parseFloat(args[1]) || 0;
-    const note = args[2] || '';
+    const name = args[0].trim();
+    if (!name) throw new Error('Bank name cannot be empty');
     
-    const docRef = db.collection('rojnamcha').doc(dateStr);
-    const doc = await docRef.get();
-    
-    if (doc.exists) {
-      await docRef.update({
-        cashDepositToBank: amount,
-        cashDepositToBankNote: note
-      });
-    } else {
-      await docRef.set({
-        date: dateStr,
-        receiptTotal: 0,
-        expenseTotal: 0,
-        netBalance: 0,
-        cashSendToHome: 0,
-        cashDepositToBank: amount,
-        closingCashInHand: 0,
-        previousClosingCash: 0,
-        cashSendToHomeNote: '',
-        cashDepositToBankNote: note
-      });
+    const id = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const docRef = db.collection('bank_accounts').doc(id);
+    const existing = await docRef.get();
+    if (existing.exists) {
+      throw new Error('Bank account already exists');
     }
     
+    await docRef.set({
+      name: name,
+      createdAt: new Date().toISOString()
+    });
+    
+    successHandler({ success: true, id: id, name: name });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_deleteBankAccount = async function(args, successHandler, failureHandler) {
+  try {
+    const id = args[0];
+    
+    // Check if there are any deposits in this bank
+    const depositsSnap = await db.collection('bank_deposits').where('bankAccountId', '==', id).limit(1).get();
+    if (!depositsSnap.empty) {
+      throw new Error('Cannot delete bank account because it has recorded deposits');
+    }
+    
+    await db.collection('bank_accounts').doc(id).delete();
     successHandler({ success: true });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+async function syncDailyCashDepositSummary(dateStr) {
+  // Query all deposits for this date
+  const depositsSnap = await db.collection('bank_deposits').where('date', '==', dateStr).get();
+  let totalAmount = 0;
+  const notes = [];
+  
+  depositsSnap.forEach(doc => {
+    const dep = doc.data();
+    totalAmount += parseFloat(dep.amount) || 0;
+    
+    // Create a compact note: "HDFC (₹5000: note)"
+    const noteText = dep.note ? `: ${dep.note}` : '';
+    notes.push(`${dep.bankAccountName} (₹${dep.amount}${noteText})`);
+  });
+  
+  const finalNote = notes.join(' | ');
+  
+  // Update the summary document
+  const docRef = db.collection('rojnamcha').doc(dateStr);
+  const doc = await docRef.get();
+  
+  if (doc.exists) {
+    await docRef.update({
+      cashDepositToBank: totalAmount,
+      cashDepositToBankNote: finalNote
+    });
+  } else {
+    await docRef.set({
+      date: dateStr,
+      receiptTotal: 0,
+      expenseTotal: 0,
+      netBalance: 0,
+      cashSendToHome: 0,
+      cashDepositToBank: totalAmount,
+      closingCashInHand: 0,
+      previousClosingCash: 0,
+      cashSendToHomeNote: '',
+      cashDepositToBankNote: finalNote
+    });
+  }
+}
+
+window.firebase_saveBankDeposit = async function(args, successHandler, failureHandler) {
+  try {
+    const depositId = args[0]; // if empty, this is a new deposit
+    const dateStr = args[1];
+    const bankAccountId = args[2];
+    const bankAccountName = args[3];
+    const amount = parseFloat(args[4]) || 0;
+    const note = args[5] || '';
+    
+    let docRef;
+    if (depositId) {
+      docRef = db.collection('bank_deposits').doc(depositId);
+    } else {
+      docRef = db.collection('bank_deposits').doc();
+    }
+    
+    await docRef.set({
+      date: dateStr,
+      bankAccountId: bankAccountId,
+      bankAccountName: bankAccountName,
+      amount: amount,
+      note: note,
+      createdAt: new Date().toISOString()
+    });
+    
+    // Sync to rojnamcha daily summary
+    await syncDailyCashDepositSummary(dateStr);
+    
+    successHandler({ success: true, id: docRef.id });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_deleteBankDeposit = async function(args, successHandler, failureHandler) {
+  try {
+    const depositId = args[0];
+    if (!depositId) throw new Error('Deposit ID is required');
+    
+    const docRef = db.collection('bank_deposits').doc(depositId);
+    const doc = await docRef.get();
+    if (!doc.exists) throw new Error('Deposit record not found');
+    
+    const dateStr = doc.data().date;
+    
+    await docRef.delete();
+    
+    // Sync to rojnamcha daily summary
+    await syncDailyCashDepositSummary(dateStr);
+    
+    successHandler({ success: true });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
+window.firebase_getBankLedgerData = async function(args, successHandler, failureHandler) {
+  try {
+    const start = args[0];
+    const end = args[1];
+    const filterBankAccountId = args[2] || '';
+    
+    // 1. Load active bank accounts to display balances
+    const accountsSnap = await db.collection('bank_accounts').get();
+    const accountBalances = {};
+    const accountsList = [];
+    accountsSnap.forEach(doc => {
+      accountsList.push({ id: doc.id, name: doc.data().name });
+      accountBalances[doc.id] = 0;
+    });
+    
+    // Default account fallback
+    if (accountsList.length === 0) {
+      accountsList.push({ id: 'default-bank', name: 'Default Bank' });
+      accountBalances['default-bank'] = 0;
+    }
+    
+    // 2. Fetch all bank deposits to calculate all-time totals and account balances
+    const allDepositsSnap = await db.collection('bank_deposits').get();
+    
+    // Check if we need to migrate old summary data (backwards compatibility)
+    if (allDepositsSnap.empty) {
+      const allSummariesSnap = await db.collection('rojnamcha').get();
+      let migratedCount = 0;
+      for (const summaryDoc of allSummariesSnap.docs) {
+        const s = summaryDoc.data();
+        const amt = parseFloat(s.cashDepositToBank) || 0;
+        if (amt > 0) {
+          // Create a new bank_deposits document for this old entry
+          await db.collection('bank_deposits').add({
+            date: s.date,
+            bankAccountId: 'default-bank',
+            bankAccountName: 'Default Bank',
+            amount: amt,
+            note: s.cashDepositToBankNote || '',
+            createdAt: new Date().toISOString()
+          });
+          migratedCount++;
+        }
+      }
+      
+      // If we migrated, re-query all deposits
+      if (migratedCount > 0) {
+        return window.firebase_getBankLedgerData(args, successHandler, failureHandler);
+      }
+    }
+    
+    let totalAllTime = 0;
+    const records = [];
+    let totalRange = 0;
+    
+    allDepositsSnap.forEach(doc => {
+      const dep = doc.data();
+      const amount = parseFloat(dep.amount) || 0;
+      const accId = dep.bankAccountId || 'default-bank';
+      
+      // Accumulate balances
+      if (accountBalances[accId] !== undefined) {
+        accountBalances[accId] += amount;
+      } else {
+        accountBalances[accId] = amount;
+      }
+      totalAllTime += amount;
+      
+      // Check date range and bank filter
+      if (dep.date >= start && dep.date <= end) {
+        if (!filterBankAccountId || dep.bankAccountId === filterBankAccountId) {
+          totalRange += amount;
+          records.push({
+            id: doc.id,
+            date: dep.date,
+            bankAccountId: accId,
+            bankAccountName: dep.bankAccountName || 'Default Bank',
+            amount: amount,
+            note: dep.note || '-'
+          });
+        }
+      }
+    });
+    
+    // Sort range records by date ascending
+    records.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // Map balances back to account list
+    const accountsWithBalances = accountsList.map(acc => ({
+      id: acc.id,
+      name: acc.name,
+      balance: accountBalances[acc.id] || 0
+    }));
+    
+    successHandler({
+      totalAllTime: totalAllTime,
+      totalRange: totalRange,
+      records: records,
+      accounts: accountsWithBalances
+    });
   } catch (err) {
     if (failureHandler) failureHandler(err);
   }
@@ -6652,7 +6876,18 @@ const state = {
         // Bank deposit modal triggers
         const bankDepositModal = document.getElementById('bank-deposit-modal');
         document.getElementById('btn-add-bank-deposit-trigger').addEventListener('click', function() {
+          // Reset form inputs for "Add" mode
+          document.getElementById('bank-deposit-id').value = '';
           document.getElementById('bank-deposit-date').value = new Date().toISOString().split('T')[0];
+          document.getElementById('bank-deposit-amount').value = '';
+          document.getElementById('bank-deposit-note').value = '';
+          
+          // Restore titles
+          const modalTitle = bankDepositModal.querySelector('h3');
+          const submitBtn = bankDepositModal.querySelector('button[type="submit"]');
+          if (modalTitle) modalTitle.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg> Add Bank Deposit`;
+          if (submitBtn) submitBtn.innerText = 'Save Deposit';
+          
           bankDepositModal.classList.add('active');
         });
         document.getElementById('btn-close-bank-deposit-modal').addEventListener('click', () => bankDepositModal.classList.remove('active'));
@@ -6974,6 +7209,7 @@ const state = {
               endInput.value = today.toISOString().split('T')[0];
               updateBankDateRangeLabel();
             }
+            loadBankAccounts();
             generateBankLedger();
           });
         }
@@ -7008,6 +7244,7 @@ const state = {
       function generateBankLedger() {
         const startDate = document.getElementById('bank-start-date').value;
         const endDate = document.getElementById('bank-end-date').value;
+        const bankFilter = document.getElementById('bank-ledger-account-filter').value;
         
         if (!startDate || !endDate) {
           showToast('Please select both Start and End dates', 'error');
@@ -7025,44 +7262,187 @@ const state = {
             showLoading(false);
             renderBankLedger(res);
             updateBankDateRangeLabel();
+            
+            // Refresh balances
+            renderBankAccountsList(res.accounts);
+            
             showToast(`Bank statement compiled successfully with ${res.records.length} deposits.`, 'success');
           })
           .withFailureHandler(function(err) {
             showLoading(false);
             showToast('Failed to compile bank report: ' + err.message, 'error');
           })
-          .getBankLedgerData(startDate, endDate);
+          .getBankLedgerData(startDate, endDate, bankFilter);
       }
 
       function handleSaveBankDeposit() {
+        const id = document.getElementById('bank-deposit-id').value;
         const date = document.getElementById('bank-deposit-date').value;
+        const select = document.getElementById('bank-deposit-account-select');
+        const bankAccountId = select.value;
+        const bankAccountName = select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : 'Default Bank';
         const amount = parseFloat(document.getElementById('bank-deposit-amount').value) || 0;
         const note = document.getElementById('bank-deposit-note').value;
         
-        if (!date || amount <= 0 || !note) {
-          showToast('Please fill all fields with valid values.', 'error');
+        if (!date || !bankAccountId || amount <= 0) {
+          showToast('Please fill all required fields correctly', 'error');
           return;
         }
         
-        showLoading(true, 'Saving bank deposit...');
+        showLoading(true, id ? 'Updating deposit entry...' : 'Saving deposit entry...');
         google.script.run
           .withSuccessHandler(function(res) {
             showLoading(false);
-            if (res && res.success) {
-              showToast('Bank deposit saved successfully!', 'success');
-              document.getElementById('bank-deposit-modal').classList.remove('active');
-              
-              document.getElementById('bank-deposit-form').reset();
-              generateBankLedger();
-            } else {
-              showToast('Failed to save deposit: ' + (res.error || 'Unknown error'), 'error');
-            }
+            document.getElementById('bank-deposit-modal').classList.remove('active');
+            showToast(id ? 'Deposit entry updated successfully!' : 'Deposit entry saved successfully!', 'success');
+            document.getElementById('bank-deposit-form').reset();
+            loadBankAccounts();
+            generateBankLedger();
           })
           .withFailureHandler(function(err) {
             showLoading(false);
             showToast('Failed to save deposit: ' + err.message, 'error');
           })
-          .saveBankDeposit(date, amount, note);
+          .saveBankDeposit(id, date, bankAccountId, bankAccountName, amount, note);
+      }
+
+      window.editBankDeposit = function(id, date, bankAccountId, amount, note) {
+        document.getElementById('bank-deposit-id').value = id;
+        document.getElementById('bank-deposit-date').value = date;
+        document.getElementById('bank-deposit-account-select').value = bankAccountId;
+        document.getElementById('bank-deposit-amount').value = amount.toFixed(2);
+        document.getElementById('bank-deposit-note').value = note;
+        
+        // Update modal titles
+        const modal = document.getElementById('bank-deposit-modal');
+        const modalTitle = modal.querySelector('h3');
+        const submitBtn = modal.querySelector('button[type="submit"]');
+        
+        if (modalTitle) modalTitle.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg> Edit Bank Deposit`;
+        if (submitBtn) submitBtn.innerText = 'Update Deposit';
+        
+        modal.classList.add('active');
+      };
+
+      window.deleteBankDeposit = function(id, amount) {
+        if (confirm(`Are you sure you want to delete this deposit entry of ₹${amount.toLocaleString('en-IN')}?`)) {
+          showLoading(true, 'Deleting deposit entry...');
+          google.script.run
+            .withSuccessHandler(function() {
+              showLoading(false);
+              showToast('Deposit entry deleted successfully', 'success');
+              loadBankAccounts();
+              generateBankLedger();
+            })
+            .withFailureHandler(function(err) {
+              showLoading(false);
+              showToast('Failed to delete entry: ' + err.message, 'error');
+            })
+            .deleteBankDeposit(id);
+        }
+      };
+
+      window.handleAddBankAccount = function() {
+        const input = document.getElementById('new-bank-account-name');
+        const name = input.value.trim();
+        if (!name) return;
+        
+        showLoading(true, 'Adding bank account...');
+        google.script.run
+          .withSuccessHandler(function() {
+            showLoading(false);
+            input.value = '';
+            showToast(`Bank account "${name}" added successfully.`, 'success');
+            loadBankAccounts();
+            generateBankLedger();
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast(err.message, 'error');
+          })
+          .addBankAccount(name);
+      };
+
+      window.handleDeleteBankAccount = function(id, name) {
+        if (confirm(`Are you sure you want to delete bank account "${name}"?`)) {
+          showLoading(true, 'Deleting bank account...');
+          google.script.run
+            .withSuccessHandler(function() {
+              showLoading(false);
+              showToast(`Bank account "${name}" deleted successfully.`, 'success');
+              loadBankAccounts();
+              generateBankLedger();
+            })
+            .withFailureHandler(function(err) {
+              showLoading(false);
+              showToast(err.message, 'error');
+            })
+            .deleteBankAccount(id);
+        }
+      };
+
+      function loadBankAccounts() {
+        google.script.run
+          .withSuccessHandler(function(accounts) {
+            state.bankAccounts = accounts;
+            
+            // Populate selectors
+            const selectModal = document.getElementById('bank-deposit-account-select');
+            const selectFilter = document.getElementById('bank-ledger-account-filter');
+            
+            const prevModalVal = selectModal.value;
+            const prevFilterVal = selectFilter.value;
+            
+            selectModal.innerHTML = '';
+            selectFilter.innerHTML = '<option value="">All Bank Accounts</option>';
+            
+            accounts.forEach(acc => {
+              const opt1 = document.createElement('option');
+              opt1.value = acc.id;
+              opt1.innerText = acc.name;
+              selectModal.appendChild(opt1);
+              
+              const opt2 = document.createElement('option');
+              opt2.value = acc.id;
+              opt2.innerText = acc.name;
+              selectFilter.appendChild(opt2);
+            });
+            
+            if (prevModalVal) selectModal.value = prevModalVal;
+            if (prevFilterVal) selectFilter.value = prevFilterVal;
+            
+            renderBankAccountsList(accounts);
+          })
+          .getBankAccounts();
+      }
+
+      function renderBankAccountsList(accounts) {
+        const container = document.getElementById('bank-accounts-list-container');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        if (accounts.length === 0) {
+          container.innerHTML = '<div style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding:1rem;">No accounts found.</div>';
+          return;
+        }
+        
+        accounts.forEach(acc => {
+          const div = document.createElement('div');
+          div.style.cssText = 'background:var(--bg-card); padding:0.6rem 0.75rem; border:1px solid var(--border-color); border-radius:0.25rem; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom:0.25rem;';
+          
+          div.innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:0.15rem;">
+              <span style="font-size:0.82rem; font-weight:700; color:var(--text-dark);">${acc.name}</span>
+              <span style="font-size:0.75rem; font-weight:800; font-family:monospace; color:#0284c7;">₹${(acc.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            ${acc.id !== 'default-bank' ? `
+              <button type="button" class="no-print" style="background:transparent; border:none; color:#ef4444; cursor:pointer; padding:0.25rem;" onclick="handleDeleteBankAccount('${acc.id}', '${acc.name}')" title="Delete Account">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              </button>
+            ` : ''}
+          `;
+          container.appendChild(div);
+        });
       }
 
       let activeBankLedgerData = null;
@@ -7083,7 +7463,7 @@ const state = {
         if (res.records.length === 0) {
           tbody.innerHTML = `
             <tr>
-              <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No deposit logs found within the selected date range.</td>
+              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No deposit logs found within the selected filters.</td>
             </tr>
           `;
           return;
@@ -7091,14 +7471,24 @@ const state = {
         
         res.records.forEach((row, slipIndex) => {
           const tr = document.createElement('tr');
+          const safeNote = (row.note || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
           tr.innerHTML = `
             <td>${formatDateReadable(row.date)}</td>
+            <td style="font-weight: 600; color: var(--text-dark);">${row.bankAccountName || 'Default Bank'}</td>
             <td style="text-align: right; padding-right: 1.5rem; font-weight: 700; color: #0284c7;">${formatCurrency(row.amount)}</td>
             <td style="color: var(--text-dark);">${row.note || '-'}</td>
-            <td style="text-align: center;" class="no-print">
-              <button type="button" class="btn-new" style="background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border: none; border-radius: 0.25rem; padding: 0.25rem 0.6rem; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.25rem; margin-bottom: 0;" onclick="showSlipModal('bank', '${row.date}', ${row.amount}, '${(row.note || '').replace(/'/g, "\\'")}', ${slipIndex + 1})">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
-                Print Slip
+            <td style="text-align: center; display: flex; gap: 0.35rem; justify-content: center; align-items: center;" class="no-print">
+              <button type="button" class="btn-new" style="background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border: none; border-radius: 0.25rem; padding: 0.25rem 0.5rem; font-size: 0.72rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.15rem; margin-bottom: 0;" onclick="showSlipModal('bank', '${row.date}', ${row.amount}, '${safeNote}', ${slipIndex + 1})">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+                Print
+              </button>
+              <button type="button" class="btn-new" style="background: linear-gradient(135deg,#eab308,#ca8a04); color: white; border: none; border-radius: 0.25rem; padding: 0.25rem 0.5rem; font-size: 0.72rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.15rem; margin-bottom: 0;" onclick="editBankDeposit('${row.id}', '${row.date}', '${row.bankAccountId}', ${row.amount}, '${safeNote}')">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+              </button>
+              <button type="button" class="btn-new" style="background: linear-gradient(135deg,#ef4444,#dc2626); color: white; border: none; border-radius: 0.25rem; padding: 0.25rem 0.5rem; font-size: 0.72rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.15rem; margin-bottom: 0;" onclick="deleteBankDeposit('${row.id}', ${row.amount})">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                Delete
               </button>
             </td>
           `;
@@ -7116,11 +7506,12 @@ const state = {
         const end = document.getElementById('bank-end-date').value;
         
         let csvContent = "data:text/csv;charset=utf-8,";
-        csvContent += "Date,Deposited Amount (INR),Notes / Remarks\r\n";
+        csvContent += "Date,Bank Account,Deposited Amount (INR),Notes / Remarks\r\n";
         
         activeBankLedgerData.records.forEach(row => {
           const cleanNote = (row.note || '').replace(/"/g, '""');
-          csvContent += `"${row.date}",${row.amount},"${cleanNote}"\r\n`;
+          const cleanBank = (row.bankAccountName || 'Default Bank').replace(/"/g, '""');
+          csvContent += `"${row.date}","${cleanBank}",${row.amount},"${cleanNote}"\r\n`;
         });
         
         const encodedUri = encodeURI(csvContent);

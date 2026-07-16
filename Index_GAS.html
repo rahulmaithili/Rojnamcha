@@ -756,74 +756,110 @@
           </div>
           
           <!-- Bank Account Ledger View (Hidden by default) -->
-          <div id="bank-ledger-view" style="display: none; flex-direction: column; gap: 2rem;">
-            <!-- Agency Header Card (For printing scope) -->
-            <div class="ledger-section-card" style="padding: 1.5rem;">
-              <div class="section-header-banner" style="background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border-radius: 0.5rem 0.5rem 0 0; margin: -1.5rem -1.5rem 1.5rem -1.5rem; padding: 1rem 1.5rem; font-size: 1rem;">
-                <span style="display:flex;align-items:center;gap:0.5rem;">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-                  Bank Account Ledger &amp; Statement
-                </span>
+          <div id="bank-ledger-view" style="display: none; flex-direction: column; gap: 1.5rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;" class="bank-grid-container">
+              
+              <!-- LEFT COLUMN: BANK ACCOUNTS OVERVIEW -->
+              <div class="ledger-section-card" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; align-self: start;">
+                <div class="section-header-banner" style="background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border-radius: 0.5rem 0.5rem 0 0; margin: -1.25rem -1.25rem 1rem -1.25rem; padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                  Manage Bank Accounts
+                </div>
+                
+                <!-- Add Account Form -->
+                <div style="background: var(--bg-main); padding: 0.85rem; border-radius: 0.375rem; border: 1px dashed var(--border-color);">
+                  <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">Add New Bank Account</div>
+                  <form id="add-bank-account-form" onsubmit="event.preventDefault(); handleAddBankAccount();" style="display:flex; gap:0.5rem;">
+                    <input type="text" id="new-bank-account-name" placeholder="e.g. SBI, HDFC..." class="table-input" style="flex:1; height:36px; background:white; border: 1.5px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem;" required>
+                    <button type="submit" class="action-btn-sidebar btn-new" style="margin-bottom:0; height:36px; padding:0 0.85rem; font-size:0.78rem; display:flex; align-items:center; justify-content:center;">Add</button>
+                  </form>
+                </div>
+                
+                <!-- Bank Accounts List Container -->
+                <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: -0.25rem;">Active Accounts &amp; Balances</div>
+                <div id="bank-accounts-list-container" style="display:flex; flex-direction:column; gap:0.5rem; max-height: 280px; overflow-y:auto; padding-right:0.25rem;">
+                  <!-- Populated dynamically -->
+                </div>
               </div>
               
-              <!-- Stats Panel -->
-              <div class="dashboard-stats" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 2rem;">
-                <div class="stat-card" style="border-left: 4px solid #0284c7;">
-                  <span class="stat-label">TOTAL DEPOSITS (ALL TIME)</span>
-                  <h2 id="bank-stat-total-alltime" class="stat-val" style="color: #0284c7;">₹ 0.00</h2>
+              <!-- RIGHT COLUMN: STATEMENT AND LOGS -->
+              <div class="ledger-section-card" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; flex: 2;">
+                <div class="section-header-banner" style="background: linear-gradient(135deg,#059669,#047857); color: white; border-radius: 0.5rem 0.5rem 0 0; margin: -1.25rem -1.25rem 1rem -1.25rem; padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                  Ledger Statement Reports
                 </div>
-                <div class="stat-card" style="border-left: 4px solid #059669;">
-                  <span class="stat-label">DEPOSITED IN RANGE</span>
-                  <h2 id="bank-stat-total-range" class="stat-val" style="color: #059669;">₹ 0.00</h2>
-                </div>
-              </div>
-              
-              <!-- Filter Card -->
-              <div id="bank-filter-card" style="background-color: var(--bg-main); padding: 1.25rem; border-radius: 0.5rem; border: 1px dashed var(--border-color); margin-bottom: 1.5rem;">
-                <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem;">Statement Period</div>
-                <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
-                  <div style="flex: 1; min-width: 200px;">
-                    <label for="bank-start-date" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">Start Date</label>
-                    <input type="date" id="bank-start-date" class="table-input" style="height: 38px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+
+                <!-- Stats Panel -->
+                <div class="dashboard-stats" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 0.5rem; gap: 1rem;">
+                  <div class="stat-card" style="border-left: 4px solid #0284c7; padding:0.6rem 0.85rem;">
+                    <span class="stat-label" style="font-size:0.65rem;">TOTAL DEPOSITS (ALL TIME)</span>
+                    <h2 id="bank-stat-total-alltime" class="stat-val" style="color: #0284c7; font-size:1.15rem; margin-top:0.2rem;">₹ 0.00</h2>
                   </div>
-                  <div style="flex: 1; min-width: 200px;">
-                    <label for="bank-end-date" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">End Date</label>
-                    <input type="date" id="bank-end-date" class="table-input" style="height: 38px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+                  <div class="stat-card" style="border-left: 4px solid #059669; padding:0.6rem 0.85rem;">
+                    <span class="stat-label" style="font-size:0.65rem;">DEPOSITED IN RANGE</span>
+                    <h2 id="bank-stat-total-range" class="stat-val" style="color: #059669; font-size:1.15rem; margin-top:0.2rem;">₹ 0.00</h2>
                   </div>
-                  <button type="button" id="btn-generate-bank-ledger" class="btn-add-option" style="width: auto; height: 38px; padding: 0 1.5rem; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border: none; border-radius: 0.375rem; cursor: pointer; gap: 0.5rem;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    Generate Statement
-                  </button>
-                  <button type="button" id="btn-add-bank-deposit-trigger" class="btn-add-option" style="width: auto; height: 38px; padding: 0 1.5rem; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; background: linear-gradient(135deg,#10b981,#059669); color: white; border: none; border-radius: 0.375rem; cursor: pointer; gap: 0.5rem; margin-left: auto;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    Add Deposit Entry
-                  </button>
+                </div>
+
+                <!-- Filter Card -->
+                <div id="bank-filter-card" style="background-color: var(--bg-main); padding: 1rem; border-radius: 0.375rem; border: 1px dashed var(--border-color);">
+                  <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem;">Statement Period &amp; Bank Filters</div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;">
+                    <div style="flex: 1; min-width: 130px;">
+                      <label for="bank-start-date" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">Start Date</label>
+                      <input type="date" id="bank-start-date" class="table-input" style="height: 36px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+                    </div>
+                    <div style="flex: 1; min-width: 130px;">
+                      <label for="bank-end-date" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">End Date</label>
+                      <input type="date" id="bank-end-date" class="table-input" style="height: 36px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+                    </div>
+                    <div style="flex: 1; min-width: 160px;">
+                      <label for="bank-ledger-account-filter" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); display:block; margin-bottom: 0.25rem;">Filter by Bank</label>
+                      <select id="bank-ledger-account-filter" class="table-input" style="height: 36px; background: white; border: 1px solid var(--border-color); border-radius: 0.25rem; padding: 0.25rem 0.5rem; width: 100%;">
+                        <option value="">All Bank Accounts</option>
+                      </select>
+                    </div>
+                    
+                    <div style="display:flex; gap:0.5rem; width:100%; margin-top:0.25rem;">
+                      <button type="button" id="btn-generate-bank-ledger" class="btn-add-option btn-new" style="flex:1; height: 38px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; gap: 0.35rem; box-shadow: 0 4px 6px -1px rgba(2,132,199,0.15);">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        Get Statement
+                      </button>
+                      <button type="button" id="btn-add-bank-deposit-trigger" class="btn-add-option btn-new" style="flex:1; height: 38px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; background: linear-gradient(135deg,#10b981,#059669); color: white; border: none; border-radius: 0.375rem; cursor: pointer; gap: 0.35rem; box-shadow: 0 4px 6px -1px rgba(16,185,129,0.15);">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        Add Deposit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Ledger Table -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.25rem;">
+                  <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Bank Deposit Logs</div>
+                  <span id="bank-record-count" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted);">0 records</span>
+                </div>
+                <div class="ledger-table-container">
+                  <table class="ledger-table" id="bank-ledger-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 100px;">Date</th>
+                        <th style="width: 135px;">Bank Account</th>
+                        <th style="width: 140px; text-align: right; padding-right: 1.5rem;">Amount (₹)</th>
+                        <th>Remarks / Notes</th>
+                        <th style="width: 180px; text-align: center;" class="no-print">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="bank-ledger-tbody">
+                      <tr>
+                        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No deposit logs loaded. Please select filters and click Get Statement.</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
               
-              <!-- Ledger Table -->
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Bank Deposit Logs</div>
-                <span id="bank-record-count" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">0 records</span>
-              </div>
-              <div class="ledger-table-container">
-                <table class="ledger-table" id="bank-ledger-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 150px;">Date</th>
-                      <th style="width: 200px; text-align: right; padding-right: 1.5rem;">Deposited Amount (₹)</th>
-                      <th>Note / Remarks</th>
-                      <th style="width: 80px; text-align: center;" class="no-print">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="bank-ledger-tbody">
-                    <tr>
-                      <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No deposit logs loaded. Please select a date range and click Generate Statement.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
             </div>
+          </div>
           </div>
         </div>
         
@@ -1231,10 +1267,17 @@
         </div>
         <div class="modal-body" style="padding: 1.5rem 1.25rem;">
           <form id="bank-deposit-form" onsubmit="event.preventDefault(); handleSaveBankDeposit();">
+            <input type="hidden" id="bank-deposit-id" value="">
             <div style="display: flex; flex-direction: column; gap: 1.25rem;">
               <div>
                 <label for="bank-deposit-date" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.4rem;">Ledger Date</label>
                 <input type="date" id="bank-deposit-date" class="table-input" style="height: 38px; background: white; border: 1.5px solid var(--border-color); border-radius: 0.375rem; padding: 0.25rem 0.75rem; width: 100%; font-family: inherit;" required>
+              </div>
+              <div>
+                <label for="bank-deposit-account-select" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.4rem;">Select Bank Account</label>
+                <select id="bank-deposit-account-select" class="table-input" style="height: 38px; background: white; border: 1.5px solid var(--border-color); border-radius: 0.375rem; padding: 0.25rem 0.75rem; width: 100%; font-family: inherit;" required>
+                  <!-- Populated dynamically -->
+                </select>
               </div>
               <div>
                 <label for="bank-deposit-amount" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.4rem;">Deposit Amount (₹)</label>
