@@ -2281,6 +2281,137 @@
         color: #6366f1;
       }
       
+      /* Premium Split Landing Page CSS */
+      .login-container-split {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        width: 100%;
+        max-width: 1100px;
+        background: rgba(30, 41, 59, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 1.5rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(25px);
+        overflow: hidden;
+        animation: loginFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      
+      .login-left-promo {
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.75));
+        padding: 3.5rem;
+        color: white;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        border-right: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      
+      .promo-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: rgba(99, 102, 241, 0.12);
+        color: #a5b4fc;
+        padding: 0.35rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        width: fit-content;
+        margin-bottom: 1.25rem;
+        border: 1px solid rgba(99, 102, 241, 0.25);
+      }
+      
+      .promo-heading {
+        font-size: 2.25rem;
+        font-weight: 800;
+        line-height: 1.2;
+        background: linear-gradient(135deg, #ffffff 30%, #c7d2fe 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.85rem;
+      }
+      
+      .promo-desc {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        margin-bottom: 2rem;
+      }
+      
+      .features-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+      }
+      
+      .feature-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+      
+      .feature-icon-wrapper {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
+        color: #a5b4fc;
+        width: 36px;
+        height: 36px;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      
+      .feature-title {
+        font-weight: 700;
+        font-size: 0.92rem;
+        color: #f1f5f9;
+        margin-bottom: 0.15rem;
+      }
+      
+      .feature-text {
+        font-size: 0.78rem;
+        color: #94a3b8;
+        line-height: 1.4;
+      }
+      
+      .login-right-card {
+        padding: 3.5rem 3rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        background: rgba(30, 41, 59, 0.25);
+        backdrop-filter: blur(10px);
+      }
+      
+      @keyframes loginFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      @media (max-width: 900px) {
+        .login-container-split {
+          grid-template-columns: 1fr;
+          max-width: 460px;
+          border-radius: 1rem;
+        }
+        .login-left-promo {
+          display: none;
+        }
+        .login-right-card {
+          padding: 2.5rem 2rem;
+        }
+      }
+      
       /* Badges and controls for User Management */
       .badge-status {
         display: inline-flex;
@@ -2604,12 +2735,12 @@
             </div>
           </div>
           
-          <!-- Database Config Button -->
-          <div class="sidebar-footer-controls" style="margin-top: auto; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.08);">
-            <button class="action-btn-sidebar btn-manage-dropdowns" id="btn-sidebar-db-config" style="margin-bottom: 0; display: flex; align-items: center; justify-content: center;" onclick="showApiConfigScreen()">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-              <span class="btn-db-settings-text" style="margin-left: 0.5rem;">Database Settings</span>
-            </button>
+          <!-- Sidebar Footer Copyright -->
+          <div class="sidebar-footer-controls" style="margin-top: auto; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.08); text-align: center; pointer-events: none;">
+            <div style="font-size: 0.72rem; color: #64748b; line-height: 1.4;">
+              © 2026 Rojnamcha Ledger.<br>
+              Developed by <span style="color: var(--primary-color); font-weight: 700;">Mr.RahulScripts</span>
+            </div>
           </div>
         </div>
       </aside>
@@ -4085,31 +4216,93 @@
 
     <!-- 1. Login Screen Overlay -->
     <div class="login-overlay" id="login-screen-overlay" style="display: none;">
-      <div class="login-card">
-        <div class="login-logo">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: white;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-        </div>
-        <h2 class="login-title">Rojnamcha Login</h2>
-        <p class="login-subtitle">Sign in to manage your daily ledger</p>
-        
-        <form id="login-form" onsubmit="event.preventDefault(); handleLoginSubmit();">
-          <div class="login-input-group">
-            <label for="login-username">Username</label>
-            <input type="text" id="login-username" class="login-input" placeholder="Enter username" required>
+      <div class="login-container-split">
+        <!-- Left Side: Product Showcase / Promo -->
+        <div class="login-left-promo">
+          <div class="promo-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            Premium Ledger Suite
           </div>
-          <div class="login-input-group">
-            <label for="login-password">Password</label>
-            <input type="password" id="login-password" class="login-input" placeholder="Enter password" required>
+          <h1 class="promo-heading">Rojnamcha Digital Ledger</h1>
+          <p class="promo-desc">
+            An advanced, real-time financial manager built for gas agencies and retail businesses. Simplify daily calculations, track bank accounts, and print receipts instantly.
+          </p>
+          
+          <div class="features-list">
+            <div class="feature-item">
+              <div class="feature-icon-wrapper">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+              </div>
+              <div>
+                <div class="feature-title">Interactive Dashboard Overview</div>
+                <div class="feature-text">Analyze pichle 7 din trends, calculate net cash in hand, and track daily total receipts vs expenses at a glance.</div>
+              </div>
+            </div>
+            
+            <div class="feature-item">
+              <div class="feature-icon-wrapper">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+              </div>
+              <div>
+                <div class="feature-title">Product &amp; Item-wise Analytics</div>
+                <div class="feature-text">Monitor total items sold/used, calculate average sale rates, and drill down to view specific transaction dates.</div>
+              </div>
+            </div>
+            
+            <div class="feature-item">
+              <div class="feature-icon-wrapper">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+              </div>
+              <div>
+                <div class="feature-title">Thermal Printer Support (58mm/80mm)</div>
+                <div class="feature-text">Generate clean monospace voucher receipts, deposit challans, and daily summary slips optimized for thermal roll prints.</div>
+              </div>
+            </div>
+            
+            <div class="feature-item">
+              <div class="feature-icon-wrapper">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+              </div>
+              <div>
+                <div class="feature-title">Multi-Bank Ledger Management</div>
+                <div class="feature-text">Track cash deposits, monitor closing balances, and log custom date-range bank statements.</div>
+              </div>
+            </div>
           </div>
-          <button type="submit" class="login-btn" id="btn-login-submit">Login</button>
-        </form>
-        
-        <div class="login-links">
-          <span class="login-link" onclick="showAuthScreen('register')">Register Account</span>
-          <span class="login-link" onclick="showAuthScreen('forgot')">Forgot Password?</span>
         </div>
-        <div class="login-links" style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.75rem; justify-content: center;">
-          <span class="login-link" onclick="showApiConfigScreen()" style="display: flex; align-items: center; gap: 4px;">⚙️ Database Settings</span>
+        
+        <!-- Right Side: Login Form -->
+        <div class="login-right-card">
+          <div class="login-logo">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: white;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          </div>
+          <h2 class="login-title">Rojnamcha Login</h2>
+          <p class="login-subtitle">Sign in to manage your daily ledger</p>
+          
+          <form id="login-form" onsubmit="event.preventDefault(); handleLoginSubmit();">
+            <div class="login-input-group">
+              <label for="login-username">Username</label>
+              <input type="text" id="login-username" class="login-input" placeholder="Enter username" required>
+            </div>
+            <div class="login-input-group">
+              <label for="login-password">Password</label>
+              <input type="password" id="login-password" class="login-input" placeholder="Enter password" required>
+            </div>
+            <button type="submit" class="login-btn" id="btn-login-submit">Login</button>
+          </form>
+          
+          <div class="login-links">
+            <span class="login-link" onclick="showAuthScreen('register')">Register Account</span>
+            <span class="login-link" onclick="showAuthScreen('forgot')">Forgot Password?</span>
+          </div>
+          
+          <!-- Copyright Developer Note -->
+          <div style="margin-top: 2.5rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem; text-align: center;">
+            <div style="font-size: 0.72rem; color: #64748b; line-height: 1.4;">
+              © 2026 Rojnamcha Ledger.<br>
+              Developed by <span style="color: #818cf8; font-weight: 700;">Mr.RahulScripts</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

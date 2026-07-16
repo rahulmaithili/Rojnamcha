@@ -2274,6 +2274,137 @@
         color: #6366f1;
       }
       
+      /* Premium Split Landing Page CSS */
+      .login-container-split {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        width: 100%;
+        max-width: 1100px;
+        background: rgba(30, 41, 59, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 1.5rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(25px);
+        overflow: hidden;
+        animation: loginFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      
+      .login-left-promo {
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.75));
+        padding: 3.5rem;
+        color: white;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        border-right: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      
+      .promo-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: rgba(99, 102, 241, 0.12);
+        color: #a5b4fc;
+        padding: 0.35rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        width: fit-content;
+        margin-bottom: 1.25rem;
+        border: 1px solid rgba(99, 102, 241, 0.25);
+      }
+      
+      .promo-heading {
+        font-size: 2.25rem;
+        font-weight: 800;
+        line-height: 1.2;
+        background: linear-gradient(135deg, #ffffff 30%, #c7d2fe 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.85rem;
+      }
+      
+      .promo-desc {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        margin-bottom: 2rem;
+      }
+      
+      .features-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+      }
+      
+      .feature-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+      
+      .feature-icon-wrapper {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
+        color: #a5b4fc;
+        width: 36px;
+        height: 36px;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      
+      .feature-title {
+        font-weight: 700;
+        font-size: 0.92rem;
+        color: #f1f5f9;
+        margin-bottom: 0.15rem;
+      }
+      
+      .feature-text {
+        font-size: 0.78rem;
+        color: #94a3b8;
+        line-height: 1.4;
+      }
+      
+      .login-right-card {
+        padding: 3.5rem 3rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        background: rgba(30, 41, 59, 0.25);
+        backdrop-filter: blur(10px);
+      }
+      
+      @keyframes loginFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      @media (max-width: 900px) {
+        .login-container-split {
+          grid-template-columns: 1fr;
+          max-width: 460px;
+          border-radius: 1rem;
+        }
+        .login-left-promo {
+          display: none;
+        }
+        .login-right-card {
+          padding: 2.5rem 2rem;
+        }
+      }
+      
       /* Badges and controls for User Management */
       .badge-status {
         display: inline-flex;
