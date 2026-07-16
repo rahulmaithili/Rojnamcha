@@ -7733,6 +7733,10 @@ const state = {
         state.drawerTargetType = type;
         state.drawerTargetRowIndex = breakdownRowIndex; // track if opened from a breakdown row
         
+        if (type === 'bank-ledger') {
+          document.getElementById('bank-deposit-modal').classList.remove('active');
+        }
+        
         const modal = document.getElementById('cash-drawer-modal');
         if (!modal) return;
 
@@ -7809,6 +7813,9 @@ const state = {
         const modal = document.getElementById('cash-drawer-modal');
         if (modal) {
           modal.classList.remove('active');
+        }
+        if (state.drawerTargetType === 'bank-ledger') {
+          document.getElementById('bank-deposit-modal').classList.add('active');
         }
         state.drawerTargetType = null;
         state.drawerTargetRowIndex = null;
