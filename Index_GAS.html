@@ -778,6 +778,10 @@
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                     Generate Statement
                   </button>
+                  <button type="button" id="btn-add-bank-deposit-trigger" class="btn-add-option" style="width: auto; height: 38px; padding: 0 1.5rem; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; background: linear-gradient(135deg,#10b981,#059669); color: white; border: none; border-radius: 0.375rem; cursor: pointer; gap: 0.5rem; margin-left: auto;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    Add Deposit Entry
+                  </button>
                 </div>
               </div>
               
@@ -1195,6 +1199,41 @@
             </div>
           </div>
         </section>
+      </div>
+    </div>
+
+    <!-- Modal: Add Bank Deposit from Bank Account Tab -->
+    <div class="modal-overlay" id="bank-deposit-modal" style="z-index: 1100;">
+      <div class="modal-content" style="max-width: 420px; border-top: 4px solid #0284c7;">
+        <div class="modal-header" style="background-color: #f0f9ff; border-bottom: 1px solid #e0f2fe; padding: 1rem 1.25rem;">
+          <h3 style="color: #0369a1; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; font-weight: 800;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            Add Bank Deposit
+          </h3>
+          <button class="btn-close-modal" id="btn-close-bank-deposit-modal" style="font-size: 1.25rem; color: #0369a1;">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem 1.25rem;">
+          <form id="bank-deposit-form" onsubmit="event.preventDefault(); handleSaveBankDeposit();">
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+              <div>
+                <label for="bank-deposit-date" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.4rem;">Ledger Date</label>
+                <input type="date" id="bank-deposit-date" class="table-input" style="height: 38px; background: white; border: 1.5px solid var(--border-color); border-radius: 0.375rem; padding: 0.25rem 0.75rem; width: 100%; font-family: inherit;" required>
+              </div>
+              <div>
+                <label for="bank-deposit-amount" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.4rem;">Deposit Amount (₹)</label>
+                <input type="number" id="bank-deposit-amount" placeholder="0.00" step="0.01" min="0.01" class="table-input" style="height: 38px; background: white; border: 1.5px solid var(--border-color); border-radius: 0.375rem; padding: 0.25rem 0.75rem; width: 100%; font-weight: 700; font-family: inherit;" required>
+              </div>
+              <div>
+                <label for="bank-deposit-note" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.4rem;">Notes / Description</label>
+                <input type="text" id="bank-deposit-note" placeholder="e.g. SBI counter, self deposit, UPI..." class="table-input" style="height: 38px; background: white; border: 1.5px solid var(--border-color); border-radius: 0.375rem; padding: 0.25rem 0.75rem; width: 100%; font-family: inherit;" required>
+              </div>
+              <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem;">
+                <button type="button" id="btn-cancel-bank-deposit" class="action-btn-sidebar" style="background: #6b7280; color: white; border: none; border-radius: 0.375rem; padding: 0.5rem 1.25rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; height: 38px; margin-bottom: 0;">Cancel</button>
+                <button type="submit" class="action-btn-sidebar btn-new" style="background: linear-gradient(135deg,#0284c7,#0369a1); color: white; border: none; border-radius: 0.375rem; padding: 0.5rem 1.5rem; font-size: 0.875rem; font-weight: 700; cursor: pointer; height: 38px; margin-bottom: 0;">Save Deposit</button>
+              </div>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
 

@@ -998,6 +998,41 @@ window.firebase_getBankLedgerData = async function(args, successHandler, failure
   }
 };
 
+window.firebase_saveBankDeposit = async function(args, successHandler, failureHandler) {
+  try {
+    const dateStr = args[0];
+    const amount = parseFloat(args[1]) || 0;
+    const note = args[2] || '';
+    
+    const docRef = db.collection('rojnamcha').doc(dateStr);
+    const doc = await docRef.get();
+    
+    if (doc.exists) {
+      await docRef.update({
+        cashDepositToBank: amount,
+        cashDepositToBankNote: note
+      });
+    } else {
+      await docRef.set({
+        date: dateStr,
+        receiptTotal: 0,
+        expenseTotal: 0,
+        netBalance: 0,
+        cashSendToHome: 0,
+        cashDepositToBank: amount,
+        closingCashInHand: 0,
+        previousClosingCash: 0,
+        cashSendToHomeNote: '',
+        cashDepositToBankNote: note
+      });
+    }
+    
+    successHandler({ success: true });
+  } catch (err) {
+    if (failureHandler) failureHandler(err);
+  }
+};
+
 window.firebase_getRangeAuditData = async function(args, successHandler, failureHandler) {
   try {
     const start = args[0];
@@ -2790,6 +2825,18 @@ const state = {
         document.getElementById('btn-print-bank-ledger').addEventListener('click', printBankLedger);
         document.getElementById('btn-export-bank-csv').addEventListener('click', exportBankLedgerCSV);
 
+        // Bank deposit modal triggers
+        const bankDepositModal = document.getElementById('bank-deposit-modal');
+        document.getElementById('btn-add-bank-deposit-trigger').addEventListener('click', function() {
+          document.getElementById('bank-deposit-date').value = new Date().toISOString().split('T')[0];
+          bankDepositModal.classList.add('active');
+        });
+        document.getElementById('btn-close-bank-deposit-modal').addEventListener('click', () => bankDepositModal.classList.remove('active'));
+        document.getElementById('btn-cancel-bank-deposit').addEventListener('click', () => bankDepositModal.classList.remove('active'));
+        bankDepositModal.addEventListener('click', function(e) {
+          if (e.target === bankDepositModal) bankDepositModal.classList.remove('active');
+        });
+
         // Audit tab event listeners
         document.getElementById('btn-generate-audit').addEventListener('click', generateAuditReport);
         document.getElementById('btn-print-all-home-slips').addEventListener('click', () => printAllRangeSlips('home'));
@@ -3138,6 +3185,37 @@ const state = {
             showToast('Failed to compile bank report: ' + err.message, 'error');
           })
           .getBankLedgerData(startDate, endDate);
+      }
+
+      function handleSaveBankDeposit() {
+        const date = document.getElementById('bank-deposit-date').value;
+        const amount = parseFloat(document.getElementById('bank-deposit-amount').value) || 0;
+        const note = document.getElementById('bank-deposit-note').value;
+        
+        if (!date || amount <= 0 || !note) {
+          showToast('Please fill all fields with valid values.', 'error');
+          return;
+        }
+        
+        showLoading(true, 'Saving bank deposit...');
+        google.script.run
+          .withSuccessHandler(function(res) {
+            showLoading(false);
+            if (res && res.success) {
+              showToast('Bank deposit saved successfully!', 'success');
+              document.getElementById('bank-deposit-modal').classList.remove('active');
+              
+              document.getElementById('bank-deposit-form').reset();
+              generateBankLedger();
+            } else {
+              showToast('Failed to save deposit: ' + (res.error || 'Unknown error'), 'error');
+            }
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to save deposit: ' + err.message, 'error');
+          })
+          .saveBankDeposit(date, amount, note);
       }
 
       let activeBankLedgerData = null;

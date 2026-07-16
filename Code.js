@@ -1348,6 +1348,74 @@ function adminResetPassword(callerUsername, callerPasswordHash, targetUsername, 
 }
 
 /**
+ * Saves or updates a bank deposit entry directly for a given date in the spreadsheet
+ */
+function saveBankDeposit(dateStr, amount, note) {
+  initializeDatabase();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Rojnamch') || ss.getSheetByName('Rojnamcha');
+  if (!sheet) {
+    return { success: false, error: 'Ledger sheet not found' };
+  }
+  
+  var data = sheet.getDataRange().getValues();
+  var colMap = getHeaderMapping(sheet);
+  var dateIdx = colMap['Date'] !== undefined ? colMap['Date'] : 0;
+  var bankIdx = colMap['CashDepositToBank'] !== undefined ? colMap['CashDepositToBank'] : 5;
+  var bankNoteIdx = colMap['CashDepositToBankNote'] !== undefined ? colMap['CashDepositToBankNote'] : 9;
+  
+  var targetRow = -1;
+  var tz = Session.getScriptTimeZone();
+  
+  for (var i = 1; i < data.length; i++) {
+    var rawDate = data[i][dateIdx];
+    if (!rawDate) continue;
+    var fd = rawDate instanceof Date ? Utilities.formatDate(rawDate, tz, 'yyyy-MM-dd') : rawDate.toString();
+    if (fd === dateStr) {
+      targetRow = i + 1; // 1-based index sheet row
+      break;
+    }
+  }
+  
+  if (targetRow > -1) {
+    sheet.getRange(targetRow, bankIdx + 1).setValue(amount);
+    sheet.getRange(targetRow, bankNoteIdx + 1).setValue(note);
+  } else {
+    var newRowValues = [];
+    var maxCol = 0;
+    for (var key in colMap) {
+      if (colMap[key] > maxCol) maxCol = colMap[key];
+    }
+    
+    for (var col = 0; col <= maxCol; col++) {
+      newRowValues.push('');
+    }
+    
+    newRowValues[dateIdx] = dateStr;
+    newRowValues[bankIdx] = amount;
+    newRowValues[bankNoteIdx] = note;
+    
+    var recTotalIdx = colMap['ReceiptTotal'] !== undefined ? colMap['ReceiptTotal'] : 1;
+    var expTotalIdx = colMap['ExpenseTotal'] !== undefined ? colMap['ExpenseTotal'] : 2;
+    var netIdx = colMap['NetBalance'] !== undefined ? colMap['NetBalance'] : 3;
+    var homeIdx = colMap['CashSendToHome'] !== undefined ? colMap['CashSendToHome'] : 4;
+    var closingIdx = colMap['ClosingCashInHand'] !== undefined ? colMap['ClosingCashInHand'] : 6;
+    var prevIdx = colMap['PreviousClosingCash'] !== undefined ? colMap['PreviousClosingCash'] : 7;
+    
+    if (recTotalIdx <= maxCol) newRowValues[recTotalIdx] = 0;
+    if (expTotalIdx <= maxCol) newRowValues[expTotalIdx] = 0;
+    if (netIdx <= maxCol) newRowValues[netIdx] = 0;
+    if (homeIdx <= maxCol) newRowValues[homeIdx] = 0;
+    if (closingIdx <= maxCol) newRowValues[closingIdx] = 0;
+    if (prevIdx <= maxCol) newRowValues[prevIdx] = 0;
+    
+    sheet.appendRow(newRowValues);
+  }
+  
+  return { success: true };
+}
+
+/**
  * Fetches daily bank deposit logs and aggregates total balances for the Bank Ledger view
  */
 function getBankLedgerData(startDateStr, endDateStr) {
@@ -1898,7 +1966,7 @@ function doPost(e) {
       'loginUser', 'registerUser', 'requestPasswordReset', 'validateSession',
       'getInitialData', 'getRojnamchaData', 'saveRojnamcha', 'getPreviousClosingCash',
       'getDropdownOptions', 'saveDropdownOption', 'deleteDropdownOption', 'updateDropdownOption',
-      'getExistingDates', 'getRangeReport', 'getDetailedRangeLedger', 'getRangeAuditData', 'getBankLedgerData',
+      'getExistingDates', 'getRangeReport', 'getDetailedRangeLedger', 'getRangeAuditData', 'getBankLedgerData', 'saveBankDeposit',
       'getCompanyProfile', 'saveCompanyProfile', 'sendLedgerEmail',
       'adminGetUserList', 'adminAddUser', 'adminUpdateUser', 'adminDeleteUser', 'adminResetPassword',
       'exportAllDataJSON', 'importAllDataJSON'
