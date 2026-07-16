@@ -3617,6 +3617,8 @@ const defaultFirebaseConfig = {
   appId: "1:853641759086:web:661bad13d56220c231997f"
 };
 
+let persistenceEnabled = false;
+
 function initDatabaseConnection() {
   dbMode = 'firebase';
   let configStr = localStorage.getItem('rojnamcha_firebase_config');
@@ -3635,14 +3637,29 @@ function initDatabaseConnection() {
     if (firebase.apps.length === 0) {
       firebaseApp = firebase.initializeApp(config);
     } else {
-      firebaseApp = firebase.app();
+      // Re-initialize with new config by deleting existing app
+      try {
+        const existingApp = firebase.app();
+        if (existingApp) {
+          existingApp.delete();
+        }
+      } catch(e) {}
+      firebaseApp = firebase.initializeApp(config);
     }
     db = firebase.firestore();
     
-    // Attempt local storage cache persistence
-    db.enablePersistence().catch(err => {
-      console.warn("Firestore offline persistence failed: ", err.code);
-    });
+    // Attempt local storage cache persistence once
+    if (!persistenceEnabled) {
+      try {
+        db.enablePersistence().then(() => {
+          persistenceEnabled = true;
+        }).catch(err => {
+          console.warn("Firestore offline persistence failed: ", err.code);
+        });
+      } catch(e) {
+        console.warn("Firestore offline persistence failed synchronously: ", e);
+      }
+    }
     return true;
   } catch(err) {
     console.error("Firebase connection initialization failed:", err);
