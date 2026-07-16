@@ -1616,7 +1616,7 @@ const state = {
         setupNavigation();
         
         const today = new Date().toISOString().split('T')[0];
-        document.getElementById('ledger-date').value = today;
+        setLedgerDateInput(today);
         
         const initialized = initDatabaseConnection();
         if (!initialized) return;
@@ -1635,11 +1635,32 @@ const state = {
           .getInitialData(today);
       }
 
+      function setLedgerDateInput(dateStr) {
+        const desk = document.getElementById('ledger-date');
+        const mob = document.getElementById('mobile-ledger-date');
+        if (desk) desk.value = dateStr;
+        if (mob) mob.value = dateStr;
+      }
+
       function initDatepicker() {
         const dateInput = document.getElementById('ledger-date');
-        dateInput.addEventListener('change', function() {
-          handleDateChange(this.value);
-        });
+        const mobileDateInput = document.getElementById('mobile-ledger-date');
+        
+        function onDateChange(val) {
+          setLedgerDateInput(val);
+          handleDateChange(val);
+        }
+        
+        if (dateInput) {
+          dateInput.addEventListener('change', function() {
+            onDateChange(this.value);
+          });
+        }
+        if (mobileDateInput) {
+          mobileDateInput.addEventListener('change', function() {
+            onDateChange(this.value);
+          });
+        }
       }
 
       function loadCompanyProfile() {
@@ -1958,7 +1979,7 @@ const state = {
           li.innerHTML = `<span class="history-item-date">${displayDate}</span>`;
           
           li.addEventListener('click', function() {
-            document.getElementById('ledger-date').value = dateStr;
+            setLedgerDateInput(dateStr);
             handleDateChange(dateStr);
           });
           
@@ -2787,11 +2808,14 @@ const state = {
           calculateAll();
         });
         
-        document.getElementById('btn-new-ledger').addEventListener('click', function() {
+        const handleNewLedgerClick = function() {
           const today = new Date().toISOString().split('T')[0];
-          document.getElementById('ledger-date').value = today;
+          setLedgerDateInput(today);
           handleDateChange(today);
-        });
+        };
+        document.getElementById('btn-new-ledger').addEventListener('click', handleNewLedgerClick);
+        const mobNewBtn = document.getElementById('mobile-btn-new-ledger');
+        if (mobNewBtn) mobNewBtn.addEventListener('click', handleNewLedgerClick);
         
         document.getElementById('btn-print-ledger').addEventListener('click', printActiveDailyLedger);
         
@@ -3045,6 +3069,15 @@ const state = {
           [dailyControls, reportsControls, auditControls, dropdownsControls, usersControls, bankLedgerControls].forEach(c => { if (c) c.style.display = 'none'; });
           [dailyFooter, reportsFooter, bankFooter].forEach(f => { if (f) f.style.display = 'none'; });
           active.classList.add('active');
+
+          // Sync mobile bottom nav buttons
+          document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+            if (btn.getAttribute('data-tab') === active.id) {
+              btn.classList.add('active');
+            } else {
+              btn.classList.remove('active');
+            }
+          });
         }
         
         tabDaily.addEventListener('click', function() {
@@ -3146,6 +3179,17 @@ const state = {
           });
         }
         
+        // Mobile bottom navigation triggers
+        document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+          btn.addEventListener('click', function() {
+            const tabId = this.getAttribute('data-tab');
+            const targetTab = document.getElementById(tabId);
+            if (targetTab) {
+              targetTab.click();
+            }
+          });
+        });
+
         // Initialize active tab state explicitly
         if (tabDaily) tabDaily.click();
       }
