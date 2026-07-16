@@ -954,8 +954,14 @@ window.firebase_getBankAccounts = async function(args, successHandler, failureHa
   try {
     const snap = await db.collection('bank_accounts').get();
     const accounts = [];
+    const needSyncIds = [];
+    
     snap.forEach(doc => {
-      accounts.push({ id: doc.id, ...doc.data() });
+      const data = doc.data();
+      accounts.push({ id: doc.id, ...data });
+      if (data.balance === undefined || data.balance === null) {
+        needSyncIds.push(doc.id);
+      }
     });
     
     // Auto-create Default Bank if none exists
@@ -966,10 +972,17 @@ window.firebase_getBankAccounts = async function(args, successHandler, failureHa
         ifsc: 'DEFAULT0001', 
         branch: 'Main Branch', 
         logo: '',
+        balance: 0,
         createdAt: new Date().toISOString() 
       };
       await db.collection('bank_accounts').doc('default-bank').set(defaultAcc);
       accounts.push({ id: 'default-bank', ...defaultAcc });
+      needSyncIds.push('default-bank');
+    }
+    
+    if (needSyncIds.length > 0) {
+      await syncBankAccountBalances(needSyncIds);
+      return window.firebase_getBankAccounts(args, successHandler, failureHandler);
     }
     
     successHandler(accounts);
@@ -1008,6 +1021,7 @@ window.firebase_saveBankAccount = async function(args, successHandler, failureHa
     
     if (!editId) {
       accountData.createdAt = new Date().toISOString();
+      accountData.balance = 0;
     }
     
     await docRef.set(accountData, { merge: true });
@@ -1034,6 +1048,20 @@ window.firebase_deleteBankAccount = async function(args, successHandler, failure
     if (failureHandler) failureHandler(err);
   }
 };
+
+async function syncBankAccountBalances(bankAccountIds) {
+  const uniqueIds = [...new Set(bankAccountIds.filter(Boolean))];
+  for (const id of uniqueIds) {
+    const snap = await db.collection('bank_deposits').where('bankAccountId', '==', id).get();
+    let total = 0;
+    snap.forEach(doc => {
+      total += parseFloat(doc.data().amount) || 0;
+    });
+    await db.collection('bank_accounts').doc(id).update({
+      balance: total
+    });
+  }
+}
 
 async function syncDailyCashDepositSummary(dateStr) {
   // Query all deposits for this date
@@ -1086,9 +1114,14 @@ window.firebase_saveBankDeposit = async function(args, successHandler, failureHa
     const amount = parseFloat(args[4]) || 0;
     const note = args[5] || '';
     
+    let oldBankAccountId = null;
     let docRef;
     if (depositId) {
       docRef = db.collection('bank_deposits').doc(depositId);
+      const oldDoc = await docRef.get();
+      if (oldDoc.exists) {
+        oldBankAccountId = oldDoc.data().bankAccountId;
+      }
     } else {
       docRef = db.collection('bank_deposits').doc();
     }
@@ -1104,6 +1137,12 @@ window.firebase_saveBankDeposit = async function(args, successHandler, failureHa
     
     // Sync to rojnamcha daily summary
     await syncDailyCashDepositSummary(dateStr);
+    
+    const syncIds = [bankAccountId];
+    if (oldBankAccountId && oldBankAccountId !== bankAccountId) {
+      syncIds.push(oldBankAccountId);
+    }
+    await syncBankAccountBalances(syncIds);
     
     successHandler({ success: true, id: docRef.id });
   } catch (err) {
@@ -1121,11 +1160,13 @@ window.firebase_deleteBankDeposit = async function(args, successHandler, failure
     if (!doc.exists) throw new Error('Deposit record not found');
     
     const dateStr = doc.data().date;
+    const bankAccountId = doc.data().bankAccountId;
     
     await docRef.delete();
     
     // Sync to rojnamcha daily summary
     await syncDailyCashDepositSummary(dateStr);
+    await syncBankAccountBalances([bankAccountId]);
     
     successHandler({ success: true });
   } catch (err) {
@@ -1139,105 +1180,66 @@ window.firebase_getBankLedgerData = async function(args, successHandler, failure
     const end = args[1];
     const filterBankAccountId = args[2] || '';
     
-    // 1. Load active bank accounts to display balances
+    // 1. Fetch active bank accounts (cached balances)
     const accountsSnap = await db.collection('bank_accounts').get();
-    const accountBalances = {};
     const accountsList = [];
+    let totalAllTime = 0;
+    
     accountsSnap.forEach(doc => {
-      accountsList.push({ id: doc.id, ...doc.data() });
-      accountBalances[doc.id] = 0;
+      const data = doc.data();
+      const bal = parseFloat(data.balance) || 0;
+      accountsList.push({ id: doc.id, ...data, balance: bal });
+      totalAllTime += bal;
     });
     
     // Default account fallback
     if (accountsList.length === 0) {
-      accountsList.push({ 
+      const defaultAcc = { 
         id: 'default-bank', 
         name: 'Default Bank', 
         accountNumber: 'XXXXXXXX1234', 
         ifsc: 'DEFAULT0001', 
         branch: 'Main Branch', 
-        logo: '' 
-      });
-      accountBalances['default-bank'] = 0;
+        logo: '',
+        balance: 0 
+      };
+      accountsList.push(defaultAcc);
     }
     
-    // 2. Fetch all bank deposits to calculate all-time totals and account balances
-    const allDepositsSnap = await db.collection('bank_deposits').get();
-    
-    // Check if we need to migrate old summary data (backwards compatibility)
-    if (allDepositsSnap.empty) {
-      const allSummariesSnap = await db.collection('rojnamcha').get();
-      let migratedCount = 0;
-      for (const summaryDoc of allSummariesSnap.docs) {
-        const s = summaryDoc.data();
-        const amt = parseFloat(s.cashDepositToBank) || 0;
-        if (amt > 0) {
-          // Create a new bank_deposits document for this old entry
-          await db.collection('bank_deposits').add({
-            date: s.date,
-            bankAccountId: 'default-bank',
-            bankAccountName: 'Default Bank',
-            amount: amt,
-            note: s.cashDepositToBankNote || '',
-            createdAt: new Date().toISOString()
-          });
-          migratedCount++;
-        }
-      }
+    // 2. Fetch deposits ONLY within date range
+    const rangeDepositsSnap = await db.collection('bank_deposits')
+      .where('date', '>=', start)
+      .where('date', '<=', end)
+      .get();
       
-      // If we migrated, re-query all deposits
-      if (migratedCount > 0) {
-        return window.firebase_getBankLedgerData(args, successHandler, failureHandler);
-      }
-    }
-    
-    let totalAllTime = 0;
     const records = [];
     let totalRange = 0;
     
-    allDepositsSnap.forEach(doc => {
+    rangeDepositsSnap.forEach(doc => {
       const dep = doc.data();
       const amount = parseFloat(dep.amount) || 0;
       const accId = dep.bankAccountId || 'default-bank';
       
-      // Accumulate balances
-      if (accountBalances[accId] !== undefined) {
-        accountBalances[accId] += amount;
-      } else {
-        accountBalances[accId] = amount;
-      }
-      totalAllTime += amount;
-      
-      // Check date range and bank filter
-      if (dep.date >= start && dep.date <= end) {
-        if (!filterBankAccountId || dep.bankAccountId === filterBankAccountId) {
-          totalRange += amount;
-          records.push({
-            id: doc.id,
-            date: dep.date,
-            bankAccountId: accId,
-            bankAccountName: dep.bankAccountName || 'Default Bank',
-            amount: amount,
-            note: dep.note || '-'
-          });
-        }
+      if (!filterBankAccountId || dep.bankAccountId === filterBankAccountId) {
+        totalRange += amount;
+        records.push({
+          id: doc.id,
+          date: dep.date,
+          bankAccountId: accId,
+          bankAccountName: dep.bankAccountName || 'Default Bank',
+          amount: amount,
+          note: dep.note || '-'
+        });
       }
     });
     
-    // Sort range records by date ascending
     records.sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    // Map balances back to account list
-    const accountsWithBalances = accountsList.map(acc => ({
-      ...acc,
-      balance: accountBalances[acc.id] || 0
-    }));
     
     successHandler({
       totalAllTime: totalAllTime,
       totalRange: totalRange,
       records: records,
-      accounts: accountsWithBalances
+      accounts: accountsList
     });
   } catch (err) {
     if (failureHandler) failureHandler(err);
