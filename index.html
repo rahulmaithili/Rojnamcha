@@ -6214,7 +6214,8 @@ const state = {
         currentBreakdownType: '',
         auditHomeRecords: [],
         auditBankRecords: [],
-        allDates: []
+        allDates: [],
+        listenersAttached: false
       };
 
       let confirmCallback = null;
@@ -7421,6 +7422,9 @@ const state = {
       }
 
       function setupEventListeners() {
+        if (state.listenersAttached) return;
+        state.listenersAttached = true;
+
         document.querySelectorAll('input').forEach(input => {
           if (input.type === 'number') {
             input.addEventListener('input', calculateAll);
