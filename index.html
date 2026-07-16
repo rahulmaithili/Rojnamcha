@@ -8422,7 +8422,7 @@ const state = {
             return;
           }
           
-          var confirmRestore = confirm("WARNING:\n\nKya aap sach me ye backup restore karna chahte hain?\n\nIsse aapka Google Sheet ka current data PURA DELETE ho jayega aur backup file ka data import ho jayega.\n\nRestoration confirm karne ke liye dialog box me 'RESTORE' likhein (बिना quotes के):");
+          var confirmRestore = prompt("WARNING:\n\nKya aap sach me ye backup restore karna chahte hain?\n\nIsse aapka Firestore ka current data PURA DELETE ho jayega aur backup file ka data import ho jayega.\n\nRestoration confirm karne ke liye dialog box me 'RESTORE' likhein (बिना quotes ke):");
           if (confirmRestore && confirmRestore.trim().toUpperCase() === 'RESTORE') {
             showLoading(true, 'Restoring database from backup...');
             google.script.run
