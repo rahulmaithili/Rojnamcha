@@ -3240,34 +3240,16 @@
         <div class="login-logo" style="background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: white;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
         </div>
-        <h2 class="login-title">Database Setup</h2>
-        <p class="login-subtitle">Choose backend database engine</p>
+        <h2 class="login-title">Firebase Database Setup</h2>
+        <p class="login-subtitle">Configure your Cloud Firestore backend</p>
         
         <form id="api-config-form" onsubmit="event.preventDefault(); handleApiConfigSubmit();">
-          <!-- Database Mode Selector -->
-          <div class="login-input-group" style="margin-bottom: 1rem;">
-            <label style="font-weight: 700; color: var(--text-dark); margin-bottom: 0.5rem; display: block;">Database Type</label>
-            <select id="db-mode-select" class="login-input" onchange="toggleDbConfigFields(this.value)" style="font-size: 0.85rem; padding: 0.65rem; border-radius: 0.375rem; width: 100%; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-dark);">
-              <option value="sheets">Google Sheets (Apps Script API)</option>
-              <option value="firebase">Firebase Firestore</option>
-            </select>
-          </div>
-
-          <!-- Sheets Configuration -->
-          <div id="sheets-config-group" class="login-input-group" style="margin-bottom: 1.5rem;">
-            <label for="setup-api-url" style="font-weight: 700; color: var(--text-dark); margin-bottom: 0.5rem; display: block;">Apps Script Web App URL</label>
-            <input type="url" id="setup-api-url" class="login-input" placeholder="https://script.google.com/macros/s/.../exec" style="font-size: 0.8rem; background: var(--input-bg); color: var(--text-dark); border: 1px solid var(--border-color); padding: 0.65rem; border-radius: 0.375rem; width: 100%;">
-            <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.4rem; display: block; line-height: 1.4;">
-              Deploy your bound Google Apps Script project as a Web App (execute as "Me", access "Anyone"), copy the URL, and paste it here.
-            </span>
-          </div>
-
           <!-- Firebase Configuration -->
-          <div id="firebase-config-group" class="login-input-group" style="margin-bottom: 1.5rem; display: none;">
+          <div id="firebase-config-group" class="login-input-group" style="margin-bottom: 1.5rem;">
             <label for="setup-firebase-config" style="font-weight: 700; color: var(--text-dark); margin-bottom: 0.5rem; display: block;">Firebase Config JSON</label>
-            <textarea id="setup-firebase-config" class="login-input" rows="7" placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}' style="font-size: 0.75rem; font-family: monospace; background: var(--input-bg); color: var(--text-dark); border: 1px solid var(--border-color); padding: 0.65rem; border-radius: 0.375rem; width: 100%; resize: vertical;"></textarea>
+            <textarea id="setup-firebase-config" class="login-input" rows="8" placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}' style="font-size: 0.75rem; font-family: monospace; background: var(--input-bg); color: var(--text-dark); border: 1px solid var(--border-color); padding: 0.65rem; border-radius: 0.375rem; width: 100%; resize: vertical;"></textarea>
             <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.4rem; display: block; line-height: 1.4;">
-              Firebase Console -> Project Settings -> Web App config block se JSON object `{ ... }` copy karke yahan paste karein.
+              Firebase Console -> Project settings -> Web App registration config block copy karke yahan paste karein.
             </span>
           </div>
 
@@ -3393,7 +3375,7 @@
 const isStandalone = typeof google === 'undefined' || !google.script || !google.script.run || (window.location.hostname !== 'script.google.com' && !window.location.hostname.endsWith('.googleusercontent.com'));
 
 // Active Database Settings
-let dbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
+let dbMode = 'firebase';
 let firebaseApp = null;
 let db = null; // Firestore reference
 
@@ -3615,33 +3597,14 @@ function createFirebaseRunContext() {
 const originalGoogle = window.google;
 
 function setupGoogleScriptRunProxy() {
-  dbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
-  
-  if (dbMode === 'firebase') {
-    window.google = {
-      script: {
-        get run() {
-          return createFirebaseRunContext();
-        }
+  dbMode = 'firebase';
+  window.google = {
+    script: {
+      get run() {
+        return createFirebaseRunContext();
       }
-    };
-  } else if (isStandalone) {
-    window.google = {
-      script: {
-        get run() {
-          return createRunContext();
-        }
-      }
-    };
-  } else {
-    window.google = originalGoogle || {
-      script: {
-        get run() {
-          return createRunContext();
-        }
-      }
-    };
-  }
+    }
+  };
 }
 
 const defaultFirebaseConfig = {
@@ -3654,74 +3617,45 @@ const defaultFirebaseConfig = {
 };
 
 function initDatabaseConnection() {
-  dbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
-  
-  if (dbMode === 'firebase') {
-    let configStr = localStorage.getItem('rojnamcha_firebase_config');
-    let config;
-    if (!configStr) {
-      config = defaultFirebaseConfig;
-      localStorage.setItem('rojnamcha_firebase_config', JSON.stringify(defaultFirebaseConfig, null, 2));
-    } else {
-      try {
-        config = JSON.parse(configStr);
-      } catch(e) {
-        config = defaultFirebaseConfig;
-      }
-    }
-    try {
-      if (firebase.apps.length === 0) {
-        firebaseApp = firebase.initializeApp(config);
-      } else {
-        firebaseApp = firebase.app();
-      }
-      db = firebase.firestore();
-      
-      // Attempt local storage cache persistence
-      db.enablePersistence().catch(err => {
-        console.warn("Firestore offline persistence failed: ", err.code);
-      });
-      return true;
-    } catch(err) {
-      console.error("Firebase connection initialization failed:", err);
-      showToast("Firebase Config error: " + err.message, "error");
-      showApiConfigScreen();
-      return false;
-    }
-  }
-  return true;
-}
-
-// UI Setup Trigger Functions
-window.toggleDbConfigFields = function(mode) {
-  const sheetsGroup = document.getElementById('sheets-config-group');
-  const firebaseGroup = document.getElementById('firebase-config-group');
-  if (mode === 'firebase') {
-    if (sheetsGroup) sheetsGroup.style.display = 'none';
-    if (firebaseGroup) firebaseGroup.style.display = 'block';
+  dbMode = 'firebase';
+  let configStr = localStorage.getItem('rojnamcha_firebase_config');
+  let config;
+  if (!configStr) {
+    config = defaultFirebaseConfig;
+    localStorage.setItem('rojnamcha_firebase_config', JSON.stringify(defaultFirebaseConfig, null, 2));
   } else {
-    if (sheetsGroup) sheetsGroup.style.display = 'block';
-    if (firebaseGroup) firebaseGroup.style.display = 'none';
+    try {
+      config = JSON.parse(configStr);
+    } catch(e) {
+      config = defaultFirebaseConfig;
+    }
   }
-};
+  try {
+    if (firebase.apps.length === 0) {
+      firebaseApp = firebase.initializeApp(config);
+    } else {
+      firebaseApp = firebase.app();
+    }
+    db = firebase.firestore();
+    
+    // Attempt local storage cache persistence
+    db.enablePersistence().catch(err => {
+      console.warn("Firestore offline persistence failed: ", err.code);
+    });
+    return true;
+  } catch(err) {
+    console.error("Firebase connection initialization failed:", err);
+    showToast("Firebase Config error: " + err.message, "error");
+    showApiConfigScreen();
+    return false;
+  }
+}
 
 function showApiConfigScreen() {
   document.querySelector('.app-container').style.display = 'none';
   document.getElementById('login-screen-overlay').style.display = 'none';
   document.getElementById('register-screen-overlay').style.display = 'none';
   document.getElementById('forgot-screen-overlay').style.display = 'none';
-  
-  const modeSelect = document.getElementById('db-mode-select');
-  const currentMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
-  if (modeSelect) {
-    modeSelect.value = currentMode;
-    toggleDbConfigFields(currentMode);
-  }
-
-  const setupUrlInput = document.getElementById('setup-api-url');
-  if (setupUrlInput) {
-    setupUrlInput.value = localStorage.getItem('rojnamcha_api_url') || 'https://script.google.com/macros/s/AKfycbx8h0orszwV29cKrVCUbrR-59HzsF1_aCFfuSBRVpQp3VnzI0carkCRWt5M_eb-Ra-DBA/exec';
-  }
   
   const firebaseInput = document.getElementById('setup-firebase-config');
   if (firebaseInput) {
@@ -3732,100 +3666,44 @@ function showApiConfigScreen() {
 }
 
 window.handleApiConfigSubmit = function() {
-  const modeSelect = document.getElementById('db-mode-select');
-  const mode = modeSelect ? modeSelect.value : 'sheets';
+  const configInput = document.getElementById('setup-firebase-config');
+  const configStr = configInput.value.trim();
+  if (!configStr) {
+    showToast('Please enter your Firebase Configuration JSON', 'error');
+    return;
+  }
   
-  if (mode === 'sheets') {
-    const urlInput = document.getElementById('setup-api-url');
-    const url = urlInput.value.trim();
-    if (!url) {
-      showToast('Please enter a valid URL', 'error');
-      return;
-    }
-
-    if (!url.startsWith('https://script.google.com/macros/s/') || !url.endsWith('/exec')) {
-      if (!confirm('The URL does not match standard Apps Script Web App structure (macros/s/.../exec). Proceed anyway?')) {
-        return;
-      }
-    }
-
-    showLoading(true, 'Testing connection...');
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'getCompanyProfile', args: [] })
-    })
-    .then(response => response.json())
-    .then(res => {
-      showLoading(false);
-      if (res && res.companyName) {
-        localStorage.setItem('rojnamcha_db_mode', 'sheets');
-        localStorage.setItem('rojnamcha_api_url', url);
-        showToast('Backend connected successfully!', 'success');
-        document.getElementById('api-config-screen-overlay').style.display = 'none';
-        
-        setupGoogleScriptRunProxy();
-        
-        const today = new Date().toISOString().split('T')[0];
-        showLoading(true, 'Loading initial data...');
-        google.script.run
-          .withSuccessHandler(function(initData) {
-            handleInitData(initData);
-            showAuthScreen('login');
-          })
-          .withFailureHandler(function(err) {
-            showLoading(false);
-            showToast('Loading failed: ' + err.message, 'error');
-          })
-          .getInitialData(today);
-      } else {
-        showToast('Failed to connect to Google Sheets backend.', 'error');
-      }
-    })
-    .catch(err => {
-      showLoading(false);
-      showToast('Connection failed: ' + err.message, 'error');
-    });
-  } else {
-    // Firebase mode
-    const configInput = document.getElementById('setup-firebase-config');
-    const configStr = configInput.value.trim();
-    if (!configStr) {
-      showToast('Please enter your Firebase Configuration JSON', 'error');
-      return;
+  try {
+    const parsed = JSON.parse(configStr);
+    if (!parsed.apiKey || !parsed.projectId) {
+      throw new Error('Config missing apiKey or projectId');
     }
     
-    try {
-      const parsed = JSON.parse(configStr);
-      if (!parsed.apiKey || !parsed.projectId) {
-        throw new Error('Config missing apiKey or projectId');
-      }
+    localStorage.setItem('rojnamcha_db_mode', 'firebase');
+    localStorage.setItem('rojnamcha_firebase_config', configStr);
+    showToast('Firebase configuration saved!', 'success');
+    document.getElementById('api-config-screen-overlay').style.display = 'none';
+    
+    const initialized = initDatabaseConnection();
+    if (initialized) {
+      setupGoogleScriptRunProxy();
       
-      localStorage.setItem('rojnamcha_db_mode', 'firebase');
-      localStorage.setItem('rojnamcha_firebase_config', configStr);
-      showToast('Firebase configuration saved!', 'success');
-      document.getElementById('api-config-screen-overlay').style.display = 'none';
-      
-      const initialized = initDatabaseConnection();
-      if (initialized) {
-        setupGoogleScriptRunProxy();
-        
-        const today = new Date().toISOString().split('T')[0];
-        showLoading(true, 'Connecting to Firestore...');
-        google.script.run
-          .withSuccessHandler(function(initData) {
-            handleInitData(initData);
-            showAuthScreen('login');
-          })
-          .withFailureHandler(function(err) {
-            showLoading(false);
-            showToast('Firestore fetch failed: ' + err.message, 'error');
-          })
-          .getInitialData(today);
-      }
-    } catch(err) {
-      showToast('Invalid Firebase configuration JSON: ' + err.message, 'error');
+      const today = new Date().toISOString().split('T')[0];
+      showLoading(true, 'Connecting to Firestore...');
+      google.script.run
+        .withSuccessHandler(function(initData) {
+          showLoading(false);
+          handleInitData(initData);
+          showAuthScreen('login');
+        })
+        .withFailureHandler(function(err) {
+          showLoading(false);
+          showToast('Firestore fetch failed: ' + err.message, 'error');
+        })
+        .getInitialData(today);
     }
+  } catch(err) {
+    showToast('Invalid Firebase configuration JSON: ' + err.message, 'error');
   }
 };
 
@@ -4675,13 +4553,10 @@ const state = {
       let confirmCallback = null;
 
       document.addEventListener('DOMContentLoaded', function() {
-        const currentDbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
-        let isConfigured = false;
-        if (currentDbMode === 'firebase') {
-          isConfigured = !!localStorage.getItem('rojnamcha_firebase_config');
-        } else {
-          isConfigured = !!localStorage.getItem('rojnamcha_api_url');
-        }
+        dbMode = 'firebase';
+        localStorage.setItem('rojnamcha_db_mode', 'firebase');
+        const isConfigured = !!localStorage.getItem('rojnamcha_firebase_config');
+        
         if (isStandalone && !isConfigured) {
           showApiConfigScreen();
         } else {
@@ -4699,13 +4574,10 @@ const state = {
       });
 
       function checkSession() {
-        const currentDbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
-        let isConfigured = false;
-        if (currentDbMode === 'firebase') {
-          isConfigured = !!localStorage.getItem('rojnamcha_firebase_config');
-        } else {
-          isConfigured = !!localStorage.getItem('rojnamcha_api_url');
-        }
+        dbMode = 'firebase';
+        localStorage.setItem('rojnamcha_db_mode', 'firebase');
+        const isConfigured = !!localStorage.getItem('rojnamcha_firebase_config');
+        
         if (isStandalone && !isConfigured) {
           showApiConfigScreen();
           return;
@@ -4753,6 +4625,40 @@ const state = {
         }
       }
 
+      function handleInitData(initData) {
+        if (initData) {
+          if (initData.success === false) {
+            showToast('Initialization error: ' + initData.error, 'error');
+            return;
+          }
+          // 1. Company Profile
+          state.companyProfile = initData.profile;
+          applyCompanyProfile(initData.profile);
+          
+          // 2. Dropdown Options
+          state.dropdownOptions = initData.options;
+          renderDropdownManagerList();
+          
+          // 3. Existing Dates
+          state.existingDates = initData.dates;
+          renderHistoryList(initData.dates);
+          
+          // 4. Load Ledger
+          const today = new Date().toISOString().split('T')[0];
+          state.selectedDate = today;
+          document.getElementById('display-date').innerText = formatDateReadable(today);
+          updateActiveSidebarItem(today);
+          
+          if (initData.rojnamchaData && !initData.rojnamchaData.isNew) {
+            populateLedger(initData.rojnamchaData);
+            showToast('Ledger loaded successfully', 'success');
+          } else {
+            resetLedgerForm();
+            applyPreviousClosingCash(today, initData.previousClosingCash || 0);
+          }
+        }
+      }
+
       function initApp() {
         document.getElementById('login-screen-overlay').style.display = 'none';
         document.getElementById('register-screen-overlay').style.display = 'none';
@@ -4786,60 +4692,21 @@ const state = {
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('ledger-date').value = today;
         
-        function handleInitData(initData) {
-          if (initData) {
-            if (initData.success === false) {
-              showToast('Initialization error: ' + initData.error, 'error');
-              return;
-            }
-            // 1. Company Profile
-            state.companyProfile = initData.profile;
-            applyCompanyProfile(initData.profile);
-            
-            // 2. Dropdown Options
-            state.dropdownOptions = initData.options;
-            renderDropdownManagerList();
-            
-            // 3. Existing Dates
-            state.existingDates = initData.dates;
-            renderHistoryList(initData.dates);
-            
-            // 4. Load Ledger
-            state.selectedDate = today;
-            document.getElementById('display-date').innerText = formatDateReadable(today);
-            updateActiveSidebarItem(today);
-            
-            if (initData.rojnamchaData && !initData.rojnamchaData.isNew) {
-              populateLedger(initData.rojnamchaData);
-              showToast('Ledger loaded successfully', 'success');
-            } else {
-              resetLedgerForm();
-              applyPreviousClosingCash(today, initData.previousClosingCash || 0);
-            }
-          }
-        }
-
-        const currentDbMode = localStorage.getItem('rojnamcha_db_mode') || 'sheets';
-        if (window.INITIAL_DATA && currentDbMode === 'sheets') {
-          handleInitData(window.INITIAL_DATA);
-        } else {
-          if (currentDbMode === 'firebase') {
-            const initialized = initDatabaseConnection();
-            if (!initialized) return;
-          }
-          // Single optimized startup call for all initial data
-          showLoading(true, 'Initializing Rojnamcha application...');
-          google.script.run
-            .withSuccessHandler(function(initData) {
-              showLoading(false);
-              handleInitData(initData);
-            })
-            .withFailureHandler(function(err) {
-              showLoading(false);
-              showToast('Initialization error: ' + err.message, 'error');
-            })
-            .getInitialData(today);
-        }
+        const initialized = initDatabaseConnection();
+        if (!initialized) return;
+        
+        // Single optimized startup call for all initial data
+        showLoading(true, 'Initializing Rojnamcha application...');
+        google.script.run
+          .withSuccessHandler(function(initData) {
+            showLoading(false);
+            handleInitData(initData);
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Initialization error: ' + err.message, 'error');
+          })
+          .getInitialData(today);
       }
 
       function initDatepicker() {

@@ -1110,34 +1110,16 @@
         <div class="login-logo" style="background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: white;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
         </div>
-        <h2 class="login-title">Database Setup</h2>
-        <p class="login-subtitle">Choose backend database engine</p>
+        <h2 class="login-title">Firebase Database Setup</h2>
+        <p class="login-subtitle">Configure your Cloud Firestore backend</p>
         
         <form id="api-config-form" onsubmit="event.preventDefault(); handleApiConfigSubmit();">
-          <!-- Database Mode Selector -->
-          <div class="login-input-group" style="margin-bottom: 1rem;">
-            <label style="font-weight: 700; color: var(--text-dark); margin-bottom: 0.5rem; display: block;">Database Type</label>
-            <select id="db-mode-select" class="login-input" onchange="toggleDbConfigFields(this.value)" style="font-size: 0.85rem; padding: 0.65rem; border-radius: 0.375rem; width: 100%; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-dark);">
-              <option value="sheets">Google Sheets (Apps Script API)</option>
-              <option value="firebase">Firebase Firestore</option>
-            </select>
-          </div>
-
-          <!-- Sheets Configuration -->
-          <div id="sheets-config-group" class="login-input-group" style="margin-bottom: 1.5rem;">
-            <label for="setup-api-url" style="font-weight: 700; color: var(--text-dark); margin-bottom: 0.5rem; display: block;">Apps Script Web App URL</label>
-            <input type="url" id="setup-api-url" class="login-input" placeholder="https://script.google.com/macros/s/.../exec" style="font-size: 0.8rem; background: var(--input-bg); color: var(--text-dark); border: 1px solid var(--border-color); padding: 0.65rem; border-radius: 0.375rem; width: 100%;">
-            <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.4rem; display: block; line-height: 1.4;">
-              Deploy your bound Google Apps Script project as a Web App (execute as "Me", access "Anyone"), copy the URL, and paste it here.
-            </span>
-          </div>
-
           <!-- Firebase Configuration -->
-          <div id="firebase-config-group" class="login-input-group" style="margin-bottom: 1.5rem; display: none;">
+          <div id="firebase-config-group" class="login-input-group" style="margin-bottom: 1.5rem;">
             <label for="setup-firebase-config" style="font-weight: 700; color: var(--text-dark); margin-bottom: 0.5rem; display: block;">Firebase Config JSON</label>
-            <textarea id="setup-firebase-config" class="login-input" rows="7" placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}' style="font-size: 0.75rem; font-family: monospace; background: var(--input-bg); color: var(--text-dark); border: 1px solid var(--border-color); padding: 0.65rem; border-radius: 0.375rem; width: 100%; resize: vertical;"></textarea>
+            <textarea id="setup-firebase-config" class="login-input" rows="8" placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}' style="font-size: 0.75rem; font-family: monospace; background: var(--input-bg); color: var(--text-dark); border: 1px solid var(--border-color); padding: 0.65rem; border-radius: 0.375rem; width: 100%; resize: vertical;"></textarea>
             <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.4rem; display: block; line-height: 1.4;">
-              Firebase Console -> Project Settings -> Web App config block se JSON object `{ ... }` copy karke yahan paste karein.
+              Firebase Console -> Project settings -> Web App registration config block copy karke yahan paste karein.
             </span>
           </div>
 
