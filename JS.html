@@ -4567,8 +4567,17 @@ const state = {
 
       // Show slip/challan modal
       function showSlipModal(type, date, amount, note, slipIndex) {
+        state.currentSlipType = type;
+        state.currentSlipDate = date;
+        state.currentSlipAmount = amount;
+        state.currentSlipNote = note;
+        state.currentSlipIndex = slipIndex;
+
         const slipContent = document.getElementById('slip-content');
         slipContent.innerHTML = buildSlipHtml(type, date, amount, note, slipIndex);
+        
+        const formatSelect = document.getElementById('slip-print-format-select');
+        if (formatSelect) formatSelect.value = 'A4';
         
         // Also populate print container
         document.getElementById('slip-print-container').innerHTML = slipContent.innerHTML;
@@ -4576,12 +4585,28 @@ const state = {
         document.getElementById('slip-modal').classList.add('active');
       }
 
-      // Print slip by activating print-slip-mode
+      // Print slip by activating print-slip-mode or print-thermal-mode
       function printSlip() {
-        document.body.classList.add('print-slip-mode');
+        const format = document.getElementById('slip-print-format-select').value;
+        const printContainer = document.getElementById('slip-print-container');
+        
+        let printClass = 'print-slip-mode';
+        if (format === '80mm') {
+          printContainer.innerHTML = buildThermalSlipHtml(state.currentSlipType, state.currentSlipDate, state.currentSlipAmount, state.currentSlipNote, state.currentSlipIndex);
+          printClass = 'print-thermal-80mm-mode';
+        } else if (format === '58mm') {
+          printContainer.innerHTML = buildThermalSlipHtml(state.currentSlipType, state.currentSlipDate, state.currentSlipAmount, state.currentSlipNote, state.currentSlipIndex);
+          printClass = 'print-thermal-58mm-mode';
+        } else {
+          printContainer.innerHTML = buildSlipHtml(state.currentSlipType, state.currentSlipDate, state.currentSlipAmount, state.currentSlipNote, state.currentSlipIndex);
+          printClass = 'print-slip-mode';
+        }
+        
+        document.body.classList.add(printClass);
         window.print();
         setTimeout(function() {
-          document.body.classList.remove('print-slip-mode');
+          document.body.classList.remove('print-slip-mode', 'print-thermal-80mm-mode', 'print-thermal-58mm-mode');
+          printContainer.innerHTML = '';
         }, 1000);
       }
 

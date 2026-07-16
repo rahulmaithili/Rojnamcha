@@ -1253,12 +1253,17 @@
             <!-- Populated dynamically -->
           </div>
         </div>
-        <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; gap: 0.75rem; justify-content: flex-end; background: #f8fafc; flex-shrink: 0;">
-          <button type="button" id="btn-print-slip" class="footer-btn btn-save" style="padding: 0.5rem 1.5rem; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem;">
+        <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; gap: 0.75rem; justify-content: flex-end; background: #f8fafc; flex-shrink: 0; flex-wrap: wrap;">
+          <select id="slip-print-format-select" class="table-input" style="height: 38px; padding: 0.25rem 0.5rem; background: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-dark); border-radius: 0.375rem; font-weight: 600; font-size: 0.85rem; outline: none; margin-bottom: 0;">
+            <option value="A4">Standard A4 Format</option>
+            <option value="80mm">Thermal 80mm Slip</option>
+            <option value="58mm">Thermal 58mm Slip</option>
+          </select>
+          <button type="button" id="btn-print-slip" class="footer-btn btn-save" style="padding: 0.5rem 1.5rem; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
             Print Slip
           </button>
-          <button type="button" class="btn-close-modal footer-btn btn-print" id="btn-cancel-slip" style="padding: 0.5rem 1.25rem; font-size: 0.9rem; background: #6b7280;">&times; Close</button>
+          <button type="button" class="btn-close-modal footer-btn btn-print" id="btn-cancel-slip" style="padding: 0.5rem 1.25rem; font-size: 0.9rem; background: #6b7280; margin-bottom: 0;">&times; Close</button>
         </div>
       </div>
     </div>
