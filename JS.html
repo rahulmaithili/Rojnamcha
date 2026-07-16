@@ -503,6 +503,15 @@ window.firebase_getInitialData = async function(args, successHandler, failureHan
   try {
     const dateStr = args[0];
     
+    // Parallelize independent Firestore queries to resolve concurrently
+    const [profileDoc, optionsSnap, rojnamchaSnap, summaryDoc, detailsSnap] = await Promise.all([
+      db.collection('company_profile').doc('profile').get(),
+      db.collection('dropdown_options').get(),
+      db.collection('rojnamcha').get(),
+      db.collection('rojnamcha').doc(dateStr).get(),
+      db.collection('rojnamcha_details').where('date', '==', dateStr).get()
+    ]);
+    
     // 1. Get/Seed Company Profile
     let profile = {
       companyName: 'SHIV SHAKTI HP GAS AGENCY',
@@ -510,16 +519,14 @@ window.firebase_getInitialData = async function(args, successHandler, failureHan
       companyGSTIN: '10AEYPK3674C2ZH',
       companyLogo: ''
     };
-    const profileDoc = await db.collection('company_profile').doc('profile').get();
     if (profileDoc.exists) {
       profile = Object.assign(profile, profileDoc.data());
     } else {
-      await db.collection('company_profile').doc('profile').set(profile);
+      db.collection('company_profile').doc('profile').set(profile);
     }
     
     // 2. Get/Seed Dropdown Options
     const options = { receipts: [], expenses: [] };
-    const optionsSnap = await db.collection('dropdown_options').get();
     if (!optionsSnap.empty) {
       optionsSnap.forEach(doc => {
         const o = doc.data();
@@ -550,7 +557,7 @@ window.firebase_getInitialData = async function(args, successHandler, failureHan
       ];
       for (let o of defaultOptions) {
         const id = o.section + '_' + o.details.replace(/\//g, '_');
-        await db.collection('dropdown_options').doc(id).set(o);
+        db.collection('dropdown_options').doc(id).set(o);
         if (o.section === 'Receipt') {
           options.receipts.push({ details: o.details, defaultRate: o.defaultRate });
         } else {
@@ -561,7 +568,6 @@ window.firebase_getInitialData = async function(args, successHandler, failureHan
     
     // 3. Get Existing Dates
     const dates = [];
-    const rojnamchaSnap = await db.collection('rojnamcha').get();
     rojnamchaSnap.forEach(doc => {
       dates.push(doc.id);
     });
@@ -569,9 +575,6 @@ window.firebase_getInitialData = async function(args, successHandler, failureHan
     
     // 4. Get Rojnamcha Data
     let rojnamchaData = null;
-    const summaryDoc = await db.collection('rojnamcha').doc(dateStr).get();
-    const detailsSnap = await db.collection('rojnamcha_details').where('date', '==', dateStr).get();
-    
     if (summaryDoc.exists || !detailsSnap.empty) {
       const summary = summaryDoc.exists ? summaryDoc.data() : {
         date: dateStr,
@@ -594,22 +597,16 @@ window.firebase_getInitialData = async function(args, successHandler, failureHan
       rojnamchaData = { summary, details };
     }
     
-    // 5. Get Previous Closing Cash
+    // 5. Get Previous Closing Cash - optimized to a single limited query
     let previousClosingCash = 0;
-    if (!rojnamchaData && dates.length > 0) {
-      const targetDate = new Date(dateStr);
-      let bestDate = null;
-      for (let dStr of dates) {
-        const d = new Date(dStr);
-        if (d < targetDate) {
-          if (!bestDate || d > bestDate) {
-            bestDate = d;
-            const prevDoc = await db.collection('rojnamcha').doc(dStr).get();
-            if (prevDoc.exists) {
-              previousClosingCash = prevDoc.data().closingCashInHand || 0;
-            }
-          }
-        }
+    if (!rojnamchaData) {
+      const prevSnap = await db.collection('rojnamcha')
+        .where('date', '<', dateStr)
+        .orderBy('date', 'desc')
+        .limit(1)
+        .get();
+      if (!prevSnap.empty) {
+        previousClosingCash = prevSnap.docs[0].data().closingCashInHand || 0;
       }
     }
     
