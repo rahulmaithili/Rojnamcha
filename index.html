@@ -3619,7 +3619,10 @@ const defaultFirebaseConfig = {
 
 let persistenceEnabled = false;
 
-function initDatabaseConnection() {
+function initDatabaseConnection(forceReinit = false) {
+  if (db && !forceReinit) {
+    return true;
+  }
   dbMode = 'firebase';
   let configStr = localStorage.getItem('rojnamcha_firebase_config');
   let config;
@@ -3708,7 +3711,7 @@ window.handleApiConfigSubmit = function() {
     showToast('Firebase configuration saved!', 'success');
     document.getElementById('api-config-screen-overlay').style.display = 'none';
     
-    const initialized = initDatabaseConnection();
+    const initialized = initDatabaseConnection(true);
     if (initialized) {
       setupGoogleScriptRunProxy();
       
