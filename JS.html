@@ -2921,6 +2921,11 @@ const state = {
         return `${day}-${months[date.getMonth()]}-${date.getFullYear()}`;
       }
 
+      function formatCurrency(val) {
+        const num = parseFloat(val) || 0;
+        return '₹' + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
       // Collapsible Sidebar Handler
       function toggleSidebar() {
         const sidebar = document.getElementById('app-sidebar');
