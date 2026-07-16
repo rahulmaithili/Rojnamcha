@@ -1,1 +1,5 @@
 backup_current/
+scratch/
+*.pdf
+local_preview.html
+.clasp.json
