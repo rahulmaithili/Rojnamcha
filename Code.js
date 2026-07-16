@@ -2297,6 +2297,6 @@ function getSpreadsheetForYear(yearStr) {
 }
 
 function getBankAccounts() { return []; }
-function addBankAccount(name) { return {}; }
+function saveBankAccount(id, name, accountNumber, ifsc, branch, logo) { return {}; }
 function deleteBankAccount(id) { return {}; }
 function deleteBankDeposit(id) { return {}; }
