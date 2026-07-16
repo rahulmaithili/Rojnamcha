@@ -2650,6 +2650,20 @@
                   <span id="dash-closing-val" class="reconciliation-val" style="color: var(--accent-gold-text);">0.00</span>
                 </div>
               </div>
+              <div class="reconciliation-card" style="border-left: 4px solid #3b82f6;">
+                <label>Today's Bank Deposit</label>
+                <div class="reconciliation-val-container">
+                  <span class="reconciliation-val-symbol" style="color: #2563eb;">₹</span>
+                  <span id="dash-bank-val" class="reconciliation-val" style="color: #2563eb;">0.00</span>
+                </div>
+              </div>
+              <div class="reconciliation-card" style="border-left: 4px solid #8b5cf6;">
+                <label>Today's Sent Home</label>
+                <div class="reconciliation-val-container">
+                  <span class="reconciliation-val-symbol" style="color: #7c3aed;">₹</span>
+                  <span id="dash-home-val" class="reconciliation-val" style="color: #7c3aed;">0.00</span>
+                </div>
+              </div>
             </div>
 
             <!-- Last 7 Days Mini Chart & Activity -->
@@ -10417,11 +10431,13 @@ const state = {
             showLoading(false);
             
             // Render Stats Card Values
-            const summary = dashData.today || { receiptTotal: 0, expenseTotal: 0, netBalance: 0, closingCashInHand: 0 };
+            const summary = dashData.today || { receiptTotal: 0, expenseTotal: 0, netBalance: 0, closingCashInHand: 0, cashDepositToBank: 0, cashSendToHome: 0 };
             document.getElementById('dash-receipts-val').innerText = (summary.receiptTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             document.getElementById('dash-expenses-val').innerText = (summary.expenseTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             document.getElementById('dash-net-val').innerText = (summary.netBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             document.getElementById('dash-closing-val').innerText = (summary.closingCashInHand || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('dash-bank-val').innerText = (summary.cashDepositToBank || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('dash-home-val').innerText = (summary.cashSendToHome || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             
             // Render Pending Alert
             const reminderEl = document.getElementById('dashboard-pending-reminder');
