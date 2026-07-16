@@ -2032,6 +2032,7 @@ const state = {
         document.getElementById('profile-mail-recipients').value = profile.mailDefaultRecipient || '';
         document.getElementById('profile-mail-subject').value = profile.mailDefaultSubject || '';
         document.getElementById('profile-mail-body').value = profile.mailDefaultBody || '';
+        document.getElementById('profile-print-font-size').value = profile.printFontSize || 10;
         
         const logoContainer = document.getElementById('agency-logo-container');
         const logoImg = document.getElementById('agency-logo-img');
@@ -2147,6 +2148,7 @@ const state = {
         const mailRecipients = document.getElementById('profile-mail-recipients').value.trim();
         const mailSubject = document.getElementById('profile-mail-subject').value.trim();
         const mailBody = document.getElementById('profile-mail-body').value.trim();
+        const printFontSize = parseFloat(document.getElementById('profile-print-font-size').value) || 10;
         
         const apiUrlField = document.getElementById('profile-api-url');
         if (apiUrlField && isStandalone) {
@@ -2170,7 +2172,8 @@ const state = {
           companyLogo: logo,
           mailDefaultRecipient: mailRecipients,
           mailDefaultSubject: mailSubject,
-          mailDefaultBody: mailBody
+          mailDefaultBody: mailBody,
+          printFontSize: printFontSize
         };
         
         showLoading(true, 'Saving company profile...');
@@ -5937,7 +5940,7 @@ const state = {
         }
 
         return `
-          <div class="daily-ledger-page page">
+          <div class="daily-ledger-page page" style="--a4-print-size: ${profile.printFontSize || 10}px !important;">
             <!-- Company Header with Branding -->
             <table class="header-table" cellpadding="0" cellspacing="0">
               <tr>
