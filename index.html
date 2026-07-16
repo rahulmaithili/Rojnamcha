@@ -4230,14 +4230,14 @@ window.firebase_getRangeReport = async function(args, successHandler, failureHan
     const detailsSnap = await db.collection('rojnamcha_details')
       .where('date', '>=', start)
       .where('date', '<=', end)
-      .where('section', '==', 'Receipt')
-      .where('sl', '==', 1)
       .get();
       
     const openingCashMap = {};
     detailsSnap.forEach(doc => {
       const d = doc.data();
-      openingCashMap[d.date] = d.amount || 0;
+      if (d.section === 'Receipt' && d.sl === 1) {
+        openingCashMap[d.date] = d.amount || 0;
+      }
     });
     
     for (let dStr in summariesMap) {
@@ -4287,7 +4287,6 @@ window.firebase_getRangeAuditData = async function(args, successHandler, failure
     const detailsSnap = await db.collection('rojnamcha_details')
       .where('date', '>=', start)
       .where('date', '<=', end)
-      .where('section', '==', 'Expense')
       .get();
       
     const onlinePayments = [];
@@ -4295,17 +4294,19 @@ window.firebase_getRangeAuditData = async function(args, successHandler, failure
     
     detailsSnap.forEach(doc => {
       const d = doc.data();
-      const detailsText = d.details || '';
-      const lower = detailsText.toLowerCase();
-      const isOnline = ONLINE_KEYWORDS.some(k => lower.indexOf(k) > -1);
-      if (isOnline) {
-        onlinePayments.push({
-          date: d.date,
-          details: d.details,
-          rate: d.rate || 0,
-          qty: d.qty || 0,
-          amount: d.amount || 0
-        });
+      if (d.section === 'Expense') {
+        const detailsText = d.details || '';
+        const lower = detailsText.toLowerCase();
+        const isOnline = ONLINE_KEYWORDS.some(k => lower.indexOf(k) > -1);
+        if (isOnline) {
+          onlinePayments.push({
+            date: d.date,
+            details: d.details,
+            rate: d.rate || 0,
+            qty: d.qty || 0,
+            amount: d.amount || 0
+          });
+        }
       }
     });
     
