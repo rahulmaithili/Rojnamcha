@@ -321,20 +321,38 @@ function showApiConfigScreen() {
 
 window.handleApiConfigSubmit = function() {
   const configInput = document.getElementById('setup-firebase-config');
-  const configStr = configInput.value.trim();
+  let configStr = configInput.value.trim();
   if (!configStr) {
     showToast('Please enter your Firebase Configuration JSON', 'error');
     return;
   }
   
+  // Clean JavaScript syntax to valid JSON format automatically
+  let cleanStr = configStr;
+  const firstBrace = cleanStr.indexOf('{');
+  const lastBrace = cleanStr.lastIndexOf('}');
+  if (firstBrace > -1 && lastBrace > -1) {
+    cleanStr = cleanStr.substring(firstBrace, lastBrace + 1);
+  }
+  
+  // Remove single-line comments
+  cleanStr = cleanStr.replace(/\/\/.*/g, '');
+  // Quote unquoted keys (e.g. apiKey: -> "apiKey":)
+  cleanStr = cleanStr.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
+  // Swap single quotes to double quotes
+  cleanStr = cleanStr.replace(/'/g, '"');
+  // Remove trailing commas before closing brackets
+  cleanStr = cleanStr.replace(/,\s*}/g, '}');
+  cleanStr = cleanStr.replace(/,\s*]/g, ']');
+
   try {
-    const parsed = JSON.parse(configStr);
+    const parsed = JSON.parse(cleanStr);
     if (!parsed.apiKey || !parsed.projectId) {
       throw new Error('Config missing apiKey or projectId');
     }
     
     localStorage.setItem('rojnamcha_db_mode', 'firebase');
-    localStorage.setItem('rojnamcha_firebase_config', configStr);
+    localStorage.setItem('rojnamcha_firebase_config', JSON.stringify(parsed, null, 2));
     showToast('Firebase configuration saved!', 'success');
     document.getElementById('api-config-screen-overlay').style.display = 'none';
     
@@ -357,7 +375,7 @@ window.handleApiConfigSubmit = function() {
         .getInitialData(today);
     }
   } catch(err) {
-    showToast('Invalid Firebase configuration JSON: ' + err.message, 'error');
+    showToast('Invalid Firebase configuration format: ' + err.message, 'error');
   }
 };
 
