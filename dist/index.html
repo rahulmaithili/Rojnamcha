@@ -4526,16 +4526,138 @@ window.firebase_exportAllDataJSON = async function(args, successHandler, failure
   }
 };
 
+function convertSheetsBackupToFirebase(backup) {
+  const firebaseData = {
+    users: {},
+    company_profile: {},
+    dropdown_options: {},
+    rojnamcha: {},
+    rojnamcha_details: {}
+  };
+
+  // 1. Convert DropdownOptions
+  const dropdownRows = (backup.master && backup.master.DropdownOptions) || [];
+  for (let row of dropdownRows) {
+    if (row.length >= 3) {
+      const section = row[0];
+      const details = row[1];
+      const defaultRate = parseFloat(row[2]) || 0;
+      if (section && details) {
+        const id = section + '_' + details.replace(/\//g, '_');
+        firebaseData.dropdown_options[id] = { section, details, defaultRate };
+      }
+    }
+  }
+
+  // 2. Convert CompanyProfile
+  const profileRows = (backup.master && backup.master.CompanyProfile) || [];
+  const profileDoc = {
+    companyName: 'SHIV SHAKTI HP GAS AGENCY',
+    companyAddress: 'PANDAUL BAZAR, MADHUBANI-847234',
+    companyGSTIN: '10AEYPK3674C2ZH',
+    companyLogo: ''
+  };
+  for (let row of profileRows) {
+    if (row.length >= 2) {
+      const key = row[0];
+      const val = row[1];
+      if (key === 'CompanyName') profileDoc.companyName = val;
+      else if (key === 'CompanyAddress') profileDoc.companyAddress = val;
+      else if (key === 'CompanyGSTIN') profileDoc.companyGSTIN = val;
+      else if (key === 'CompanyLogo') profileDoc.companyLogo = val;
+      else if (key === 'MailDefaultRecipient') profileDoc.mailDefaultRecipient = val;
+      else if (key === 'MailDefaultSubject') profileDoc.mailDefaultSubject = val;
+      else if (key === 'MailDefaultBody') profileDoc.mailDefaultBody = val;
+    }
+  }
+  firebaseData.company_profile['profile'] = profileDoc;
+
+  // 3. Convert Users
+  const userRows = (backup.master && backup.master.Users) || [];
+  for (let row of userRows) {
+    if (row.length >= 8) {
+      const username = row[0];
+      const passwordHash = row[1];
+      const name = row[2];
+      const email = row[3];
+      const role = row[4];
+      const status = row[5];
+      const resetRequest = row[6] === true || row[6] === 'true';
+      const createdAt = row[7];
+      if (username) {
+        const docId = username.toLowerCase();
+        firebaseData.users[docId] = { username, passwordHash, name, email, role, status, resetRequest, createdAt };
+      }
+    }
+  }
+
+  // 4. Convert Rojnamcha
+  const rojnamchaRows = backup.rojnamcha || [];
+  for (let row of rojnamchaRows) {
+    if (row.length >= 7) {
+      let dateVal = row[0];
+      if (dateVal) {
+        const dateStr = dateVal.split('T')[0];
+        firebaseData.rojnamcha[dateStr] = {
+          date: dateStr,
+          receiptTotal: parseFloat(row[1]) || 0,
+          expenseTotal: parseFloat(row[2]) || 0,
+          netBalance: parseFloat(row[3]) || 0,
+          cashSendToHome: parseFloat(row[4]) || 0,
+          cashDepositToBank: parseFloat(row[5]) || 0,
+          closingCashInHand: parseFloat(row[6]) || 0,
+          previousClosingCash: parseFloat(row[7]) || 0,
+          cashSendToHomeNote: row[8] || '',
+          cashDepositToBankNote: row[9] || ''
+        };
+      }
+    }
+  }
+
+  // 5. Convert RojnamchaDetails
+  const detailsRows = backup.rojnamchaDetails || [];
+  for (let row of detailsRows) {
+    if (row.length >= 7) {
+      let dateVal = row[0];
+      if (dateVal) {
+        const dateStr = dateVal.split('T')[0];
+        const section = row[1];
+        const sl = parseInt(row[2]) || 1;
+        const details = row[3];
+        const rate = parseFloat(row[4]) || 0;
+        const qty = parseFloat(row[5]) || 0;
+        const amount = parseFloat(row[6]) || 0;
+        const docId = dateStr + '_' + section + '_' + sl;
+        firebaseData.rojnamcha_details[docId] = { date: dateStr, section, sl, details, rate, qty, amount };
+      }
+    }
+  }
+
+  return firebaseData;
+}
+
 window.firebase_importAllDataJSON = async function(args, successHandler, failureHandler) {
   try {
     const backupDataStr = args[0];
     const backup = JSON.parse(backupDataStr);
-    if (!backup || !backup.data) {
+    if (!backup) {
       successHandler({ success: false, error: 'Invalid backup file format' });
       return;
     }
     
-    for (let col in backup.data) {
+    let collectionsToImport = null;
+    if (backup.master && (backup.rojnamcha || backup.rojnamchaDetails)) {
+      // Convert Sheets format to Firebase format
+      collectionsToImport = convertSheetsBackupToFirebase(backup);
+    } else if (backup.data) {
+      // Firebase format
+      collectionsToImport = backup.data;
+    } else {
+      successHandler({ success: false, error: 'Invalid backup file format' });
+      return;
+    }
+    
+    for (let col in collectionsToImport) {
       const snap = await db.collection(col).get();
       const clearBatch = db.batch();
       snap.forEach(doc => {
@@ -4544,7 +4666,7 @@ window.firebase_importAllDataJSON = async function(args, successHandler, failure
       await clearBatch.commit();
       
       const writeBatch = db.batch();
-      const colData = backup.data[col];
+      const colData = collectionsToImport[col];
       let count = 0;
       for (let docId in colData) {
         const ref = db.collection(col).doc(docId);
@@ -8422,30 +8544,42 @@ const state = {
             return;
           }
           
-          var confirmRestore = prompt("WARNING:\n\nKya aap sach me ye backup restore karna chahte hain?\n\nIsse aapka Firestore ka current data PURA DELETE ho jayega aur backup file ka data import ho jayega.\n\nRestoration confirm karne ke liye dialog box me 'RESTORE' likhein (बिना quotes ke):");
-          if (confirmRestore && confirmRestore.trim().toUpperCase() === 'RESTORE') {
-            showLoading(true, 'Restoring database from backup...');
-            google.script.run
-              .withSuccessHandler(function(res) {
-                showLoading(false);
+           showCustomPrompt(
+            "WARNING:\n\nKya aap sach me ye backup restore karna chahte hain?\n\nIsse aapka Firestore ka current data PURA DELETE ho jayega aur backup file ka data import ho jayega.\n\nRestoration confirm karne ke liye dialog box me 'RESTORE' likhein:",
+            "",
+            function(confirmRestore) {
+              if (confirmRestore && confirmRestore.trim().toUpperCase() === 'RESTORE') {
+                showLoading(true, 'Restoring database from backup...');
+                google.script.run
+                  .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    event.target.value = '';
+                    if (res && res.success) {
+                      alert('Database restored successfully! The page will now reload.');
+                      window.location.reload();
+                    } else {
+                      showToast('Restore failed: ' + (res.error || 'Unknown error'), 'error');
+                    }
+                  })
+                  .withFailureHandler(function(err) {
+                    showLoading(false);
+                    event.target.value = '';
+                    showToast('Import failed: ' + err.message, 'error');
+                  })
+                  .importAllDataJSON(content);
+              } else {
                 event.target.value = '';
-                if (res && res.success) {
-                  alert('Database restored successfully! The page will now reload.');
-                  window.location.reload();
-                } else {
-                  showToast('Restore failed: ' + (res.error || 'Unknown error'), 'error');
-                }
-              })
-              .withFailureHandler(function(err) {
-                showLoading(false);
-                event.target.value = '';
-                showToast('Import failed: ' + err.message, 'error');
-              })
-              .importAllDataJSON(content);
-          } else {
-            event.target.value = '';
-            showToast('Restore cancelled.', 'info');
-          }
+                showToast('Restore cancelled or incorrect confirmation word.', 'info');
+              }
+            },
+            {
+              title: "Confirm Database Restore",
+              label: "Confirmation Word",
+              placeholder: "Type RESTORE to confirm...",
+              okText: "Restore Now",
+              cancelText: "Cancel"
+            }
+          );
         };
         reader.readAsText(file);
       };
