@@ -284,18 +284,6 @@ function initDatabaseConnection() {
     }
     db = firebase.firestore();
     
-    // Attempt local storage cache persistence once
-    if (!persistenceEnabled) {
-      try {
-        db.enablePersistence().then(() => {
-          persistenceEnabled = true;
-        }).catch(err => {
-          console.warn("Firestore offline persistence failed: ", err.code);
-        });
-      } catch(e) {
-        console.warn("Firestore offline persistence failed synchronously: ", e);
-      }
-    }
     return true;
   } catch(err) {
     console.error("Firebase connection initialization failed:", err);
