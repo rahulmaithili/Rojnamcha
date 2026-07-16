@@ -1549,9 +1549,31 @@
 
       /* Print CSS */
       @media print {
-        @page {
+        @page A4Page {
           size: A4 portrait;
           margin: 6mm 10mm !important;
+        }
+        
+        @page Thermal80Page {
+          size: 80mm auto;
+          margin: 0 !important;
+        }
+        
+        @page Thermal58Page {
+          size: 58mm auto;
+          margin: 0 !important;
+        }
+
+        body {
+          page: A4Page;
+        }
+        
+        body.print-thermal-80mm-mode {
+          page: Thermal80Page !important;
+        }
+        
+        body.print-thermal-58mm-mode {
+          page: Thermal58Page !important;
         }
 
         .preview-banner,
@@ -1895,6 +1917,12 @@
         }
         
         /* Thermal 80mm Print Mode */
+        html.print-thermal-80mm-mode, body.print-thermal-80mm-mode {
+          width: 80mm !important;
+          max-width: 80mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
         body.print-thermal-80mm-mode .app-container,
         body.print-thermal-80mm-mode .preview-banner,
         body.print-thermal-80mm-mode .toast-container,
@@ -1912,6 +1940,12 @@
          }
          
          /* Thermal 58mm Print Mode */
+         html.print-thermal-58mm-mode, body.print-thermal-58mm-mode {
+           width: 58mm !important;
+           max-width: 58mm !important;
+           margin: 0 !important;
+           padding: 0 !important;
+         }
          body.print-thermal-58mm-mode .app-container,
          body.print-thermal-58mm-mode .preview-banner,
          body.print-thermal-58mm-mode .toast-container,

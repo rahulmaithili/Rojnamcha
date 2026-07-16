@@ -6719,4 +6719,91 @@ const state = {
         `;
         return html;
       }
+
+      function buildThermalSlipHtml(type, date, amount, note, slipIndex) {
+        const profile = state.companyProfile || {};
+        const companyName = profile.companyName || 'GAS AGENCY';
+        const companyAddress = profile.companyAddress || '';
+        const companyGSTIN = profile.companyGSTIN || '';
+        const isHome = type === 'home';
+        const slipTypeLabel = isHome ? 'CASH VOUCHER (SENT HOME)' : 'BANK DEPOSIT CHALLAN';
+        const amountWords = convertNumberToWords(amount);
+        const suffix = (slipIndex !== undefined && slipIndex !== null) ? ('-' + slipIndex) : '';
+        const voucherNo = 'VCH/' + date.replace(/-/g, '') + '/' + (isHome ? 'H' : 'B') + suffix;
+        const currentUserName = state.currentUser ? (state.currentUser.name || state.currentUser.username) : 'System';
+
+        let cashIndexHtml = '';
+        let displayNote = note || '';
+
+        if (note && note.trim().startsWith('[Breakdown:')) {
+          const parsedMultiple = parseMultipleTransfers(note);
+          const slips = [];
+          parsedMultiple.entries.forEach((entry, idx) => {
+            let subSlipIndex = (idx + 1);
+            if (slipIndex !== undefined && slipIndex !== null) {
+              subSlipIndex = slipIndex + '-' + (idx + 1);
+            }
+            slips.push(buildThermalSlipHtml(type, date, entry.amount, entry.note, subSlipIndex));
+          });
+          const divider = `<div class="slip-separator" style="margin: 1.5rem 0; border-top: 1px dashed #000;"></div>`;
+          return slips.join(divider);
+        } else {
+          const parsedCash = parseDenominationsFromNote(note);
+          if (parsedCash) {
+            displayNote = parsedCash.cleanNote;
+            cashIndexHtml = `
+              <div style="margin-top: 6px; margin-bottom: 6px;">
+                <div style="font-size: 9px; font-weight: bold; border-bottom: 1px dashed #000; padding-bottom: 2px; margin-bottom: 4px; text-transform: uppercase;">
+                  CASH INDEX / DENOMINATIONS
+                </div>
+                <table style="width: 100%; font-size: 8px; border-collapse: collapse;">
+                  ${parsedCash.breakdown.map(item => `
+                    <tr>
+                      <td style="padding: 1px 0;">${item.label} (${item.count} pcs)</td>
+                      <td style="padding: 1px 0; text-align: right;">₹${item.total.toFixed(2)}</td>
+                    </tr>
+                  `).join('')}
+                  <tr style="border-top: 1px dashed #000; font-weight: bold;">
+                    <td style="padding: 3px 0 1px 0;">TOTAL COUNT</td>
+                    <td style="padding: 3px 0 1px 0; text-align: right;">₹${parsedCash.total.toFixed(2)}</td>
+                  </tr>
+                </table>
+              </div>
+            `;
+          }
+          
+          return `
+            <div style="width: 100%; font-family: monospace; color: #000; padding: 2px; line-height: 1.3;">
+              <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 4px; margin-bottom: 6px;">
+                <h4 style="margin: 0; font-size: 13px; font-weight: bold; text-transform: uppercase;">${companyName}</h4>
+                ${companyAddress ? `<p style="margin: 2px 0; font-size: 9px;">${companyAddress}</p>` : ''}
+                ${companyGSTIN ? `<p style="margin: 2px 0; font-size: 9px; font-weight: bold;">GSTIN: ${companyGSTIN}</p>` : ''}
+                <h5 style="margin: 4px 0 0 0; font-size: 10px; text-transform: uppercase; border-top: 1px dashed #000; padding-top: 4px;">${slipTypeLabel}</h5>
+              </div>
+              
+              <table style="width: 100%; font-size: 9px; border-collapse: collapse; margin-bottom: 6px;">
+                <tr><td style="padding: 2px 0;">Voucher No.</td><td style="padding: 2px 0; text-align: right; font-weight: bold;">${voucherNo}</td></tr>
+                <tr><td style="padding: 2px 0;">Date</td><td style="padding: 2px 0; text-align: right; font-weight: bold;">${formatDateReadable(date)}</td></tr>
+                <tr style="font-size: 10px; font-weight: bold;"><td style="padding: 3px 0; border-top: 1px dashed #000; border-bottom: 1px dashed #000;">AMOUNT</td><td style="padding: 3px 0; text-align: right; border-top: 1px dashed #000; border-bottom: 1px dashed #000;">₹${parseFloat(amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>
+                <tr><td colspan="2" style="padding: 2px 0; font-style: italic; font-size: 8px; text-transform: capitalize;">Words: ${amountWords} Rupees Only</td></tr>
+                ${displayNote ? `<tr><td style="padding: 2px 0;">Note/Ref.</td><td style="padding: 2px 0; text-align: right;">${displayNote}</td></tr>` : ''}
+                <tr><td style="padding: 2px 0;">Gen. By</td><td style="padding: 2px 0; text-align: right;">${currentUserName}</td></tr>
+              </table>
+              
+              ${cashIndexHtml}
+              
+              <div style="border-top: 1px dashed #000; margin-top: 8px; padding-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; text-align: center; font-size: 8px;">
+                <div>
+                  <div style="font-weight: bold; margin-top: 8px;">${currentUserName}</div>
+                  <div style="border-top: 0.5px solid #000; margin-top: 2px; padding-top: 1px;">Prepared By</div>
+                </div>
+                <div>
+                  <div style="margin-top: 16px;"></div>
+                  <div style="border-top: 0.5px solid #000; margin-top: 2px; padding-top: 1px;">Authorized Sign</div>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+      }
     </script>
