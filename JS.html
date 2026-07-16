@@ -3186,6 +3186,11 @@ const state = {
         document.getElementById('btn-print-report').addEventListener('click', printRangeReport);
         document.getElementById('btn-print-range-detailed').addEventListener('click', printDetailedRangeLedger);
         document.getElementById('btn-email-ledger-range').addEventListener('click', () => openEmailModal('range'));
+        
+        const btnGenAnalytics = document.getElementById('btn-generate-analytics');
+        if (btnGenAnalytics) {
+          btnGenAnalytics.addEventListener('click', loadItemAnalytics);
+        }
 
         // Bank Ledger triggers
         document.getElementById('btn-generate-bank-ledger').addEventListener('click', generateBankLedger);
@@ -3413,6 +3418,7 @@ const state = {
         const tabDaily = document.getElementById('tab-daily');
         const tabSearch = document.getElementById('tab-search');
         const tabReports = document.getElementById('tab-reports');
+        const tabAnalytics = document.getElementById('tab-analytics');
         const tabAudit = document.getElementById('tab-audit');
         const tabDropdowns = document.getElementById('tab-dropdowns');
         const tabUsers = document.getElementById('tab-users');
@@ -3422,6 +3428,7 @@ const state = {
         const dailyView = document.getElementById('daily-workspace-view');
         const searchView = document.getElementById('search-workspace-view');
         const reportsView = document.getElementById('reports-workspace-view');
+        const analyticsView = document.getElementById('analytics-workspace-view');
         const auditView = document.getElementById('audit-workspace-view');
         const dropdownsView = document.getElementById('dropdowns-workspace-view');
         const usersView = document.getElementById('users-workspace-view');
@@ -3443,8 +3450,8 @@ const state = {
 
         function switchTab(active) {
           // Reset all
-          [tabDashboard, tabDaily, tabSearch, tabReports, tabAudit, tabDropdowns, tabUsers, tabBankLedger].forEach(t => { if (t) t.classList.remove('active'); });
-          [dashboardView, dailyView, searchView, reportsView, auditView, dropdownsView, usersView, bankLedgerView].forEach(v => { if (v) v.style.display = 'none'; });
+          [tabDashboard, tabDaily, tabSearch, tabReports, tabAnalytics, tabAudit, tabDropdowns, tabUsers, tabBankLedger].forEach(t => { if (t) t.classList.remove('active'); });
+          [dashboardView, dailyView, searchView, reportsView, analyticsView, auditView, dropdownsView, usersView, bankLedgerView].forEach(v => { if (v) v.style.display = 'none'; });
           [dailyControls, reportsControls, auditControls, dropdownsControls, usersControls, bankLedgerControls].forEach(c => { if (c) c.style.display = 'none'; });
           [dailyFooter, reportsFooter, bankFooter].forEach(f => { if (f) f.style.display = 'none'; });
           active.classList.add('active');
@@ -3518,6 +3525,28 @@ const state = {
             updateReportDateRangeLabel();
           }
         });
+
+        if (tabAnalytics) {
+          tabAnalytics.addEventListener('click', function() {
+            switchTab(tabAnalytics);
+            if (analyticsView) analyticsView.style.display = 'flex';
+            dateLabel.innerText = 'PRODUCT SCOPE';
+            dateDisplay.innerText = 'Item Analytics';
+            
+            const startInput = document.getElementById('analytics-start-date');
+            const endInput = document.getElementById('analytics-end-date');
+            if (startInput && endInput && (!startInput.value || !endInput.value)) {
+              const today = new Date();
+              const y = today.getFullYear();
+              const m = today.getMonth();
+              const firstDay = new Date(y, m, 1).toISOString().split('T')[0];
+              const lastDay = today.toISOString().split('T')[0];
+              startInput.value = firstDay;
+              endInput.value = lastDay;
+            }
+            loadItemAnalytics();
+          });
+        }
 
         tabAudit.addEventListener('click', function() {
           switchTab(tabAudit);
@@ -6808,5 +6837,135 @@ const state = {
             </div>
           `;
         }
+      }
+
+      let analyticsData = {};
+
+      function loadItemAnalytics() {
+        const start = document.getElementById('analytics-start-date').value;
+        const end = document.getElementById('analytics-end-date').value;
+        
+        if (!start || !end) {
+          showToast('Please select start and end dates', 'error');
+          return;
+        }
+        
+        showLoading(true, 'Generating Item-wise Analytics...');
+        
+        google.script.run
+          .withSuccessHandler(function(entries) {
+            showLoading(false);
+            
+            const groups = {};
+            
+            entries.forEach(function(entry) {
+              const name = (entry.details || '').trim();
+              if (!name) return;
+              
+              const key = entry.section + '|||' + name.toUpperCase();
+              if (!groups[key]) {
+                groups[key] = {
+                  name: name,
+                  type: entry.section,
+                  totalQty: 0,
+                  totalAmount: 0,
+                  records: []
+                };
+              }
+              
+              groups[key].totalQty += entry.qty || 0;
+              groups[key].totalAmount += entry.amount || 0;
+              groups[key].records.push(entry);
+            });
+            
+            analyticsData = groups;
+            
+            const tbody = document.getElementById('analytics-summary-tbody');
+            tbody.innerHTML = '';
+            
+            const groupList = Object.values(groups);
+            groupList.sort((a, b) => b.totalAmount - a.totalAmount);
+            
+            if (groupList.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">No product/item transactions found in this date range.</td></tr>';
+              document.getElementById('analytics-summary-section').style.display = 'block';
+              document.getElementById('analytics-details-section').style.display = 'none';
+              return;
+            }
+            
+            groupList.forEach(function(g) {
+              const avgRate = g.totalQty > 0 ? (g.totalAmount / g.totalQty) : 0;
+              const typeColor = g.type === 'Receipt' ? 'var(--receipt-primary)' : 'var(--expense-primary)';
+              const typeLabel = g.type === 'Receipt' ? 'Sale (Inflow)' : 'Expense (Outflow)';
+              
+              const safeKey = g.type + '|||' + g.name.toUpperCase();
+              const tr = document.createElement('tr');
+              tr.innerHTML = `
+                <td style="font-weight: 700; color: var(--text-dark);">${g.name}</td>
+                <td style="text-align: center;"><span style="color: ${typeColor}; font-weight: 700; font-size: 0.8rem; background: ${g.type === 'Receipt' ? 'var(--receipt-bg)' : 'var(--expense-bg)'}; padding: 0.2rem 0.5rem; border-radius: 0.25rem;">${typeLabel}</span></td>
+                <td style="text-align: center; font-weight: 600;">${g.totalQty.toLocaleString('en-IN')}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: 600;">₹${avgRate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: 700; color: ${typeColor};">₹${g.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="text-align: center;">
+                  <button type="button" class="btn-delete-option" style="color: var(--primary-color); border: 1px solid var(--primary-color); padding: 0.25rem 0.6rem; border-radius: 0.25rem; font-size: 0.75rem;" onclick="viewItemAnalyticsDetails('${safeKey.replace(/'/g, "\\'")}')">
+                    View Details
+                  </button>
+                </td>
+              `;
+              tbody.appendChild(tr);
+            });
+            
+            document.getElementById('analytics-summary-section').style.display = 'block';
+            document.getElementById('analytics-details-section').style.display = 'none';
+          })
+          .withFailureHandler(function(err) {
+            showLoading(false);
+            showToast('Failed to load item analytics: ' + err.toString(), 'error');
+          })
+          .searchEntries('', start, end);
+      }
+
+      function viewItemAnalyticsDetails(key) {
+        const group = analyticsData[key];
+        if (!group) return;
+        
+        document.getElementById('analytics-details-title').innerText = `Item Details Breakdown: ${group.name} (${group.type === 'Receipt' ? 'Sales' : 'Expenses'})`;
+        
+        const tbody = document.getElementById('analytics-details-tbody');
+        tbody.innerHTML = '';
+        
+        group.records.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        group.records.forEach(function(rec) {
+          const tr = document.createElement('tr');
+          const amtColor = group.type === 'Receipt' ? 'var(--receipt-primary)' : 'var(--expense-primary)';
+          tr.innerHTML = `
+            <td style="font-weight: 600; color: var(--text-muted);">${formatDateReadable(rec.date)}</td>
+            <td style="text-align: right; font-family: monospace;">₹${(rec.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            <td style="text-align: center; font-weight: 600;">${(rec.qty || 0).toLocaleString('en-IN')}</td>
+            <td style="text-align: right; font-family: monospace; font-weight: 700; color: ${amtColor};">₹${(rec.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            <td style="font-size: 0.8rem; color: var(--text-dark);">${rec.note || '-'}</td>
+            <td style="text-align: center;">
+              <button type="button" class="btn-delete-option" style="color: var(--accent-gold-text); border: 1px solid var(--accent-gold); padding: 0.25rem 0.6rem; border-radius: 0.25rem; font-size: 0.75rem;" onclick="jumpToLedgerDate('${rec.date}')">
+                Edit Date
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+        
+        const detailsCard = document.getElementById('analytics-details-section');
+        detailsCard.style.display = 'block';
+        detailsCard.scrollIntoView({ behavior: 'smooth' });
+      }
+
+      function jumpToLedgerDate(dateStr) {
+        state.selectedDate = dateStr;
+        document.getElementById('ledger-date').value = dateStr;
+        
+        // Find tab-daily button and click it to switch view
+        const tabDaily = document.getElementById('tab-daily');
+        if (tabDaily) tabDaily.click();
+        loadDailyLedger(dateStr);
       }
     </script>
